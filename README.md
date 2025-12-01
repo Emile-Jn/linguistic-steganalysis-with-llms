@@ -1,5 +1,7 @@
 # Linguistic-Steganalysis-with-LLMs
 
+Emile's version
+
 ## Prelimilaries
 
 ### 1. Virtual Environment
