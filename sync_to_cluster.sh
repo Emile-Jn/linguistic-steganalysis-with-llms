@@ -3,7 +3,7 @@
 # Exit on error
 set -e
 
-LOCAL_DIR="/Users/emilejohnston/DataspellProjects/entropy-steering-steganography"
+LOCAL_DIR="/Users/emilejohnston/DataspellProjects/Linguistic-Steganalysis-with-LLMs"
 REMOTE="e12229987@cluster.datalab.tuwien.ac.at"
 REMOTE_DIR=""
 
