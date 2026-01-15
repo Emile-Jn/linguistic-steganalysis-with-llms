@@ -109,11 +109,15 @@ def run_inference(texts, model, tokenizer, device):
     """Run generation for a list of texts using an already-loaded model/tokenizer."""
     answers = []
     for text in tqdm(texts):
-        input_text = f"### Text:\n{text.strip()}\n\n### Question:\nIs the above text steganographic or non-steganographic?\n\n### Answer:\n"
+        input_text = f"### Text:\n{text.strip()}\n\n### Question:\nIs the above text steganographic?\n\n### Answer:\n"
         input_text = tokenizer.bos_token + input_text if tokenizer.bos_token is not None else input_text
         inputs = tokenizer([input_text], return_tensors="pt").to(device)
         predict = model.generate(**inputs, num_beams=1, do_sample=False, max_new_tokens=10, min_new_tokens=2)
-        output = tokenizer.decode(predict[0][inputs.input_ids.shape[1]:])
+        gen_ids = predict[0][inputs.input_ids.shape[1]:]
+        # skip special tokens and clean up spaces
+        output = tokenizer.decode(gen_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True).strip()
+        # make output UTF-8 safe (replace undecodable/surrogate characters)
+        output = output.encode("utf-8", errors="replace").decode("utf-8", errors="replace")
         answers.append(output.strip())
     return answers
 
@@ -133,6 +137,9 @@ def run_all_tests(nmax: int = -1):
     except Exception:
         # fallback to current working directory when project name lookup fails
         root = Path.cwd()
+    # Track total lines processed and timing for the whole run
+    total_lines_processed = 0
+    start_time = time()
     data_root = root / "data"
     logs_root = root / "logs"
 
@@ -154,6 +161,7 @@ def run_all_tests(nmax: int = -1):
         print(f"Data root {data_root} does not exist. Nothing to process.")
         return
 
+    start_inf = time()
     for dataset_dir in sorted([d for d in data_root.iterdir() if d.is_dir()]):
         rel_dataset = dataset_dir.name
         out_dataset_dir = run_dir / rel_dataset
@@ -177,6 +185,8 @@ def run_all_tests(nmax: int = -1):
                 continue
             out_path = out_dataset_dir / txt_file.name
             save_outputs_to_file(outputs, str(out_path))
+            # Only count lines after successful generation + save
+            total_lines_processed += len(texts)
             processed_files += 1
         summary[rel_dataset] = processed_files
 
@@ -186,6 +196,10 @@ def run_all_tests(nmax: int = -1):
         # Use ISO 8601 UTC timestamp without microseconds, e.g. 2026-01-15T14:32:00Z
         "timestamp": datetime.now(timezone.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "summary": summary,
+        "total_lines_processed": total_lines_processed,
+        # total processing time in seconds (rounded to milliseconds)
+        "total_inference_time_seconds": round(time() - start_inf, 3),
+        "total_time_seconds": round(time() - start_time, 3)
     }
     # Write manifest explicitly with UTF-8 encoding and preserve non-ASCII characters
     (run_dir / "manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
