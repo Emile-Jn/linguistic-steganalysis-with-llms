@@ -1,0 +1,13 @@
+{
+  "run_dir": "/home/e12229987/Linguistic-Steganalysis-with-LLMs/logs/run_8",
+  "lora_weight_path": "checkpoint-22000",
+  "timestamp": "2026-01-16T17:05:19Z",
+  "summary": {
+    "ac": "2 files",
+    "adg": "2 files",
+    "hc5": "2 files"
+  },
+  "total_lines_processed": 60,
+  "total_inference_time_seconds": 28.233,
+  "total_time_seconds": 45.903
+}

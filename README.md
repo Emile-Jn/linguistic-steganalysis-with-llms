@@ -1,8 +1,9 @@
 # Linguistic-Steganalysis-with-LLMs
 
-Emile's version
-paper: Towards Next-Generation Steganalysis: LLMs
-Unleash the Power of Detecting Steganography
+Repo: Emile's version
+
+Research paper: [*Towards Next-Generation Steganalysis: LLMs
+Unleash the Power of Detecting Steganography*](https://arxiv.org/abs/2405.09090)
 
 ## Prelimilaries
 

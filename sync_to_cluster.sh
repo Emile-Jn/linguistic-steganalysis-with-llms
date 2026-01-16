@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+# Before running this script, make sure the TU Wien VPN is active if needed!
+
 # Exit on error
 set -e
 

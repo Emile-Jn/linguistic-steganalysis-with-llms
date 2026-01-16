@@ -1,0 +1,12 @@
+{
+  "run_dir": "/home/e12229987/Linguistic-Steganalysis-with-LLMs/logs/run_5",
+  "timestamp": "2026-01-15T17:50:55Z",
+  "summary": {
+    "ac": 2,
+    "adg": 2,
+    "hc5": 2
+  },
+  "total_lines_processed": 300,
+  "total_inference_time_seconds": 88.311,
+  "total_time_seconds": 97.515
+}

@@ -61,7 +61,7 @@ def get_next_run_dir(logs_root: Path) -> Path:
     return logs_root / f"run_{next_n}"
 
 
-def load_model_and_tokenizer(use_lora: bool = True):
+def load_model_and_tokenizer(use_lora: bool = True, lora_weight_path: str = "checkpoint-22000"):
     """Load Llama model, tokenizer and optionally apply LoRA weights. Returns (model, tokenizer, device)."""
     device = get_device()
     print("Using device:", device)
@@ -73,6 +73,13 @@ def load_model_and_tokenizer(use_lora: bool = True):
         device_map="auto",
     )
     tokenizer = LlamaTokenizer.from_pretrained(model_name_or_path)
+
+    # debugging: check that eos tokens match
+    print('\n- - - - - Debug info - - - - -\n')
+    print(tokenizer.special_tokens_map)
+    print(tokenizer.eos_token_id)
+    print(model.config.eos_token_id)
+    print('\n- - - - - - - - - - -  - - - -\n')
 
     # Load LoRA configuration and weights
     # Ensure JSON config files are read with explicit UTF-8 encoding
@@ -94,7 +101,7 @@ def load_model_and_tokenizer(use_lora: bool = True):
     model = get_peft_model(model, config)
 
     if use_lora:
-        lora_weight_path = "checkpoint-22000/pytorch_model.bin"
+        lora_weight_path = f"{lora_weight_path}/pytorch_model.bin"
         if Path(lora_weight_path).exists():
             ckpt_name = lora_weight_path
             lora_weight = torch.load(ckpt_name)
@@ -106,23 +113,37 @@ def load_model_and_tokenizer(use_lora: bool = True):
 
 
 def run_inference(texts, model, tokenizer, device):
-    """Run generation for a list of texts using an already-loaded model/tokenizer."""
+    """Run generation for a list of texts using an already-loaded model/tokenizer.
+
+    Returns a list of generated string outputs. If `return_tokens=True` is passed
+    (see wrapper use below), this function can also return a parallel list of
+    generated token id lists for each input (one list per line).
+    """
     answers = []
+    token_ids_lists = []
     for text in tqdm(texts):
         input_text = f"### Text:\n{text.strip()}\n\n### Question:\nIs the above text steganographic?\n\n### Answer:\n"
         input_text = tokenizer.bos_token + input_text if tokenizer.bos_token is not None else input_text
         inputs = tokenizer([input_text], return_tensors="pt").to(device)
         predict = model.generate(**inputs, num_beams=1, do_sample=False, max_new_tokens=10, min_new_tokens=2)
         gen_ids = predict[0][inputs.input_ids.shape[1]:]
+        # Convert token ids to plain Python list (move to CPU first)
+        try:
+            ids_list = gen_ids.cpu().tolist()
+        except Exception:
+            # fallback if gen_ids is already a list-like
+            ids_list = list(gen_ids)
+        token_ids_lists.append(ids_list)
         # skip special tokens and clean up spaces
         output = tokenizer.decode(gen_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True).strip()
         # make output UTF-8 safe (replace undecodable/surrogate characters)
         output = output.encode("utf-8", errors="replace").decode("utf-8", errors="replace")
         answers.append(output.strip())
-    return answers
+    # Return both lists; caller may choose to ignore tokens if not needed
+    return answers, token_ids_lists
 
 
-def run_all_tests(nmax: int = -1):
+def run_all_tests(nmax: int = -1, lora_weight_path: str = "checkpoint-22000", print_tokens: bool = False, use_lora: bool = True):
     """Top-level pipeline (no args):
     - Creates logs/ if missing
     - Creates a new run_X folder inside logs/
@@ -130,6 +151,9 @@ def run_all_tests(nmax: int = -1):
 
     Args:
         nmax: maximum number of lines to take from each .txt file. If -1, take all lines.
+        lora_weight_path: path to the LoRA weights folder
+        print_tokens: whether to print generated token IDs to console
+        use_lora: whether to load LoRA weights (fine-tuned weights from a checkpoint) into the model
     """
     try:
         # try to resolve project root via utils.get_root_dir()
@@ -150,7 +174,7 @@ def run_all_tests(nmax: int = -1):
 
     # Load model and tokenizer once
     try:
-        model, tokenizer, device = load_model_and_tokenizer(use_lora=True)
+        model, tokenizer, device = load_model_and_tokenizer(use_lora=use_lora, lora_weight_path=lora_weight_path)
     except Exception as e:
         print("Failed to load model/tokenizer:", e)
         return
@@ -179,20 +203,29 @@ def run_all_tests(nmax: int = -1):
                 print(f"  Skipping empty or missing file {txt_file}")
                 continue
             try:
-                outputs = run_inference(texts, model, tokenizer, device)
+                outputs, token_lists = run_inference(texts, model, tokenizer, device)
             except Exception as e:
                 print(f"  Inference failed for {txt_file}: {e}")
                 continue
             out_path = out_dataset_dir / txt_file.name
             save_outputs_to_file(outputs, str(out_path))
+            # If requested, write token id lists to a JSONL file next to the output .txt
+            if print_tokens:
+                # Replace .txt suffix with .tokens.jsonl (e.g. cover.txt -> cover.tokens.jsonl)
+                tokens_path = out_path.with_suffix('.tokens.jsonl')
+                tokens_path.parent.mkdir(parents=True, exist_ok=True)
+                with tokens_path.open('w', encoding='utf-8') as tf:
+                    for ids in token_lists:
+                        tf.write(json.dumps(ids, ensure_ascii=False) + '\n')
             # Only count lines after successful generation + save
             total_lines_processed += len(texts)
             processed_files += 1
-        summary[rel_dataset] = processed_files
+        summary[rel_dataset] = f"{processed_files} files"
 
     # Save a small manifest for the run
     manifest = {
         "run_dir": str(run_dir),
+        "lora_weight_path": lora_weight_path,
         # Use ISO 8601 UTC timestamp without microseconds, e.g. 2026-01-15T14:32:00Z
         "timestamp": datetime.now(timezone.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "summary": summary,
@@ -209,5 +242,11 @@ def run_all_tests(nmax: int = -1):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run steganographic detection tests over text datasets")
     parser.add_argument("-nmax", type=int, default=-1, help="maximum number of lines to read from each .txt file (-1 for all)")
+    # Path to LoRA weights (folder containing pytorch_model.bin or similar)
+    parser.add_argument("--lora-path",dest='lora_path', type=str, default="checkpoint-22000", help="path to the LoRA weights folder (default: checkpoint-22000)")
+    # If set, write a .tokens.jsonl file next to each generated .txt with token id arrays per line
+    parser.add_argument("--print-tokens", action="store_true", dest="print_tokens",
+                        help="write per-output token id JSONL files next to the .txt outputs")
+    parser.add_argument("--use-lora", action="store_true", dest="use_lora", default=True, help="use LoRA weights (default: True)")
     args = parser.parse_args()
-    run_all_tests(nmax=args.nmax)
+    run_all_tests(nmax=args.nmax, lora_weight_path=args.lora_path, print_tokens=args.print_tokens, use_lora=args.use_lora)
