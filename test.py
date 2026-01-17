@@ -6,7 +6,6 @@ Test LoRA fine-tuned Llama model for steganographic text detection
 # Third-party modules
 from time import time
 start = time()
-import torch
 import json
 from transformers import LlamaForCausalLM, LlamaTokenizer
 import safetensors
@@ -15,7 +14,6 @@ from peft import (
     get_peft_model,
     set_peft_model_state_dict,
 )
-from tqdm import tqdm
 import argparse
 from typing import Optional
 from datetime import datetime, timezone
@@ -24,6 +22,9 @@ from datetime import datetime, timezone
 from utils import get_device, get_root_dir
 
 from pathlib import Path
+
+# New: prefer 64 for A100 throughput
+BATCH_SIZE = 64
 
 
 def read_txt_lines(path: str):
@@ -46,6 +47,40 @@ def save_outputs_to_file(outputs, path: str) -> None:
             f.write(out.replace("\n", " ").strip() + "\n")
 
 
+# Add a helper to atomically write the manifest so periodic saves are safe.
+def write_manifest_atomic(run_dir: Path, summary: dict, total_lines_processed: int, start_inf: float, start_time: float, lora_weight_path: str):
+    """Write the run manifest to run_dir/manifest.json atomically.
+
+    Args:
+        run_dir: Path to the run directory
+        summary: per-dataset summary dict
+        total_lines_processed: integer total of lines processed so far
+        start_inf: inference start time (seconds since epoch)
+        start_time: overall run start time (seconds since epoch)
+        lora_weight_path: descriptive path used for this run
+    """
+    manifest = {
+        "run_dir": str(run_dir),
+        "lora_weight_path": lora_weight_path,
+        # Use ISO 8601 UTC timestamp without microseconds
+        "timestamp": datetime.now(timezone.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "summary": summary,
+        "total_lines_processed": total_lines_processed,
+        # total processing time in seconds (rounded to milliseconds)
+        "total_inference_time_seconds": round(time() - start_inf, 3),
+        "total_time_seconds": round(time() - start_time, 3)
+    }
+    tmp_path = run_dir / "manifest.json.tmp"
+    final_path = run_dir / "manifest.json"
+    # Write using UTF-8 and then rename to be atomic on most platforms
+    tmp_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
+    try:
+        tmp_path.replace(final_path)
+    except Exception:
+        # fallback to simple write if replace() fails for any reason
+        final_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
 def get_next_run_dir(logs_root: Path) -> Path:
     """Return a new run directory path under logs_root named run_1, run_2, ..."""
     logs_root.mkdir(parents=True, exist_ok=True)
@@ -63,6 +98,13 @@ def get_next_run_dir(logs_root: Path) -> Path:
 
 def load_model_and_tokenizer(use_lora: bool = True, lora_weight_path: str = "checkpoint-22000"):
     """Load Llama model, tokenizer and optionally apply LoRA weights. Returns (model, tokenizer, device)."""
+    # Import torch lazily so running parts of the script that don't need the model
+    # (e.g. listing files or dry-run) won't require PyTorch to be installed.
+    try:
+        import torch
+    except Exception as e:
+        raise RuntimeError("PyTorch is required to load the model. Install torch or run with --dry-run") from e
+
     device = get_device()
     print("Using device:", device)
     model_name_or_path = "linhvu/decapoda-research-llama-7b-hf"
@@ -112,38 +154,64 @@ def load_model_and_tokenizer(use_lora: bool = True, lora_weight_path: str = "che
     return model, tokenizer, device
 
 
-def run_inference(texts, model, tokenizer, device):
-    """Run generation for a list of texts using an already-loaded model/tokenizer.
+def run_inference(texts, model, tokenizer, device, batch_size: int = BATCH_SIZE):
+    """Batched inference: tokenize and generate in minibatches of `batch_size`.
 
-    Returns a list of generated string outputs. If `return_tokens=True` is passed
-    (see wrapper use below), this function can also return a parallel list of
-    generated token id lists for each input (one list per line).
+    Returns (answers, token_ids_lists) preserving input order.
     """
     answers = []
     token_ids_lists = []
-    for text in tqdm(texts):
-        input_text = f"### Text:\n{text.strip()}\n\n### Question:\nIs the above text steganographic?\n\n### Answer:\n"
-        input_text = tokenizer.bos_token + input_text if tokenizer.bos_token is not None else input_text
-        inputs = tokenizer([input_text], return_tensors="pt").to(device)
-        predict = model.generate(**inputs, num_beams=1, do_sample=False, max_new_tokens=10, min_new_tokens=2)
-        gen_ids = predict[0][inputs.input_ids.shape[1]:]
-        # Convert token ids to plain Python list (move to CPU first)
-        try:
-            ids_list = gen_ids.cpu().tolist()
-        except Exception:
-            # fallback if gen_ids is already a list-like
-            ids_list = list(gen_ids)
-        token_ids_lists.append(ids_list)
-        # skip special tokens and clean up spaces
-        output = tokenizer.decode(gen_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True).strip()
-        # make output UTF-8 safe (replace undecodable/surrogate characters)
-        output = output.encode("utf-8", errors="replace").decode("utf-8", errors="replace")
-        answers.append(output.strip())
-    # Return both lists; caller may choose to ignore tokens if not needed
+    if not texts:
+        return answers, token_ids_lists
+
+    # Ensure tokenizer has a pad token for batching
+    if getattr(tokenizer, 'pad_token_id', None) is None:
+        tokenizer.pad_token = tokenizer.eos_token
+
+    # Build full prompts for each input
+    prompts = []
+    for text in texts:
+        prompt = f"### Text:\n{text.strip()}\n\n### Question:\nIs the above text steganographic?\n\n### Answer:\n"
+        if getattr(tokenizer, 'bos_token', None) is not None:
+            prompt = tokenizer.bos_token + prompt
+        prompts.append(prompt)
+
+    # Process in minibatches to maximize GPU throughput
+    for start in range(0, len(prompts), batch_size):
+        batch_prompts = prompts[start:start + batch_size]
+        # Tokenize the batch with padding so attention masks reflect real lengths
+        inputs = tokenizer(batch_prompts, return_tensors='pt', padding=True, truncation=False)
+        # Move tensors to device
+        inputs = {k: v.to(device) for k, v in inputs.items()}
+
+        # Compute per-example input lengths (number of non-padded tokens)
+        if 'attention_mask' in inputs:
+            input_lens = inputs['attention_mask'].sum(dim=1)
+        else:
+            input_lens = inputs['input_ids'].ne(tokenizer.pad_token_id).sum(dim=1)
+
+        # Generate for the full batch
+        gen = model.generate(**inputs, num_beams=1, do_sample=False, max_new_tokens=10, min_new_tokens=2)
+
+        # For each sequence in the batch, slice off the prompt tokens and decode
+        for i in range(gen.shape[0]):
+            seq = gen[i]
+            in_len = int(input_lens[i].item())
+            gen_ids = seq[in_len:]
+            try:
+                ids_list = gen_ids.cpu().tolist()
+            except Exception:
+                ids_list = list(gen_ids)
+            token_ids_lists.append(ids_list)
+
+            out = tokenizer.decode(gen_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True).strip()
+            out = out.encode('utf-8', errors='replace').decode('utf-8', errors='replace')
+            answers.append(out)
+
     return answers, token_ids_lists
 
 
-def run_all_tests(nmax: int = -1, lora_weight_path: str = "checkpoint-22000", print_tokens: bool = False, use_lora: bool = True):
+def run_all_tests(nmax: int = -1, lora_weight_path: str = "checkpoint-22000", print_tokens: bool = False, use_lora: bool = True, manifest_threshold: int = 1000, dry_run: bool = False):
     """Top-level pipeline (no args):
     - Creates logs/ if missing
     - Creates a new run_X folder inside logs/
@@ -172,12 +240,18 @@ def run_all_tests(nmax: int = -1, lora_weight_path: str = "checkpoint-22000", pr
     run_dir.mkdir(parents=True, exist_ok=True)
     print(f"Creating new run directory: {run_dir}")
 
-    # Load model and tokenizer once
-    try:
-        model, tokenizer, device = load_model_and_tokenizer(use_lora=use_lora, lora_weight_path=lora_weight_path)
-    except Exception as e:
-        print("Failed to load model/tokenizer:", e)
-        return
+    # Initialize next threshold for periodic manifest writes
+    # The threshold is configurable via the `manifest_threshold` parameter (default 1000)
+    next_manifest_threshold = int(manifest_threshold) if manifest_threshold and manifest_threshold > 0 else 1000
+
+    # Load model and tokenizer once (skip if dry_run)
+    model = tokenizer = device = None
+    if not dry_run:
+        try:
+            model, tokenizer, device = load_model_and_tokenizer(use_lora=use_lora, lora_weight_path=lora_weight_path)
+        except Exception as e:
+            print("Failed to load model/tokenizer:", e)
+            return
 
     summary = {}
 
@@ -202,40 +276,57 @@ def run_all_tests(nmax: int = -1, lora_weight_path: str = "checkpoint-22000", pr
             if not texts:
                 print(f"  Skipping empty or missing file {txt_file}")
                 continue
+            # Process the file in chunks so outputs are flushed periodically (including writing
+            # the outputs file and optional token JSONL). This ensures large input files do not
+            # only get written once at the end.
+            chunk_size = int(manifest_threshold) if manifest_threshold and manifest_threshold > 0 else 1000
+            out_path = out_dataset_dir / txt_file.name
+            tokens_path = out_path.with_suffix('.tokens.jsonl')
+            # Ensure parent exists
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            wrote_any = False
             try:
-                outputs, token_lists = run_inference(texts, model, tokenizer, device)
+                for i in range(0, len(texts), chunk_size):
+                    chunk = texts[i:i+chunk_size]
+                    # In dry-run mode, simulate outputs quickly without calling the model
+                    if dry_run:
+                        outputs = [f"DRYRUN_OUTPUT_LINE_{j}" for j in range(len(chunk))]
+                        token_lists = [[] for _ in chunk]
+                    else:
+                        # Run batched inference (tokenization+generation). Single call only.
+                        outputs, token_lists = run_inference(chunk, model, tokenizer, device, batch_size=BATCH_SIZE)
+                    # Write outputs to file incrementally. Use 'w' for the first write to
+                    # replace any existing file, then append for subsequent chunks.
+                    mode = 'w' if not wrote_any else 'a'
+                    with out_path.open(mode, encoding='utf-8') as of:
+                        for out in outputs:
+                            of.write(out.replace('\n', ' ').strip() + '\n')
+                    # If requested, append token id lists to the tokens JSONL file
+                    if print_tokens:
+                        tokens_path.parent.mkdir(parents=True, exist_ok=True)
+                        mode_t = 'w' if not wrote_any else 'a'
+                        with tokens_path.open(mode_t, encoding='utf-8') as tf:
+                            for ids in token_lists:
+                                tf.write(json.dumps(ids, ensure_ascii=False) + '\n')
+
+                    # Update counters after chunk saved
+                    total_lines_processed += len(chunk)
+                    wrote_any = True
+
+                    # Write manifest periodically every `manifest_threshold` outputs.
+                    while total_lines_processed >= next_manifest_threshold:
+                        write_manifest_atomic(run_dir, summary, total_lines_processed, start_inf, start_time, lora_weight_path)
+                        print(f"Wrote periodic manifest at {total_lines_processed} total lines (threshold {next_manifest_threshold}).")
+                        next_manifest_threshold += chunk_size
+                processed_files += 1
             except Exception as e:
                 print(f"  Inference failed for {txt_file}: {e}")
+                # don't count this file as processed
                 continue
-            out_path = out_dataset_dir / txt_file.name
-            save_outputs_to_file(outputs, str(out_path))
-            # If requested, write token id lists to a JSONL file next to the output .txt
-            if print_tokens:
-                # Replace .txt suffix with .tokens.jsonl (e.g. cover.txt -> cover.tokens.jsonl)
-                tokens_path = out_path.with_suffix('.tokens.jsonl')
-                tokens_path.parent.mkdir(parents=True, exist_ok=True)
-                with tokens_path.open('w', encoding='utf-8') as tf:
-                    for ids in token_lists:
-                        tf.write(json.dumps(ids, ensure_ascii=False) + '\n')
-            # Only count lines after successful generation + save
-            total_lines_processed += len(texts)
-            processed_files += 1
         summary[rel_dataset] = f"{processed_files} files"
 
-    # Save a small manifest for the run
-    manifest = {
-        "run_dir": str(run_dir),
-        "lora_weight_path": lora_weight_path,
-        # Use ISO 8601 UTC timestamp without microseconds, e.g. 2026-01-15T14:32:00Z
-        "timestamp": datetime.now(timezone.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "summary": summary,
-        "total_lines_processed": total_lines_processed,
-        # total processing time in seconds (rounded to milliseconds)
-        "total_inference_time_seconds": round(time() - start_inf, 3),
-        "total_time_seconds": round(time() - start_time, 3)
-    }
-    # Write manifest explicitly with UTF-8 encoding and preserve non-ASCII characters
-    (run_dir / "manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
+    # Save a small manifest for the run (final write)
+    write_manifest_atomic(run_dir, summary, total_lines_processed, start_inf, start_time, lora_weight_path)
     print("Run finished. Summary:", summary)
 
 
@@ -247,6 +338,13 @@ if __name__ == "__main__":
     # If set, write a .tokens.jsonl file next to each generated .txt with token id arrays per line
     parser.add_argument("--print-tokens", action="store_true", dest="print_tokens",
                         help="write per-output token id JSONL files next to the .txt outputs")
-    parser.add_argument("--use-lora", action="store_true", dest="use_lora", default=True, help="use LoRA weights (default: True)")
+    # If set, do NOT load LoRA weights (i.e. use base model only)
+    parser.add_argument("--no-lora", action="store_true", dest="no_lora", default=True, help="use LoRA weights (default: True)")
+    # How often (in number of outputs) to write the run manifest
+    parser.add_argument("--manifest-threshold", dest="manifest_threshold", type=int, default=1000,
+                        help="number of outputs between periodic manifest writes (default 1000)")
+    # Quick dry-run to test file/manifest writes without loading the ML model
+    parser.add_argument("--dry-run", dest="dry_run", action="store_true", default=False,
+                        help="simulate generation without loading model (for testing manifest/output writes)")
     args = parser.parse_args()
-    run_all_tests(nmax=args.nmax, lora_weight_path=args.lora_path, print_tokens=args.print_tokens, use_lora=args.use_lora)
+    run_all_tests(nmax=args.nmax, lora_weight_path=args.lora_path, print_tokens=args.print_tokens, use_lora=not args.no_lora, manifest_threshold=args.manifest_threshold, dry_run=args.dry_run)
