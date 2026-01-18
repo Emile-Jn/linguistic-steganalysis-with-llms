@@ -8,7 +8,6 @@ from time import time
 start = time()
 import json
 from transformers import LlamaForCausalLM, LlamaTokenizer
-import safetensors
 from peft import (
     LoraConfig,
     get_peft_model,
@@ -48,7 +47,7 @@ def save_outputs_to_file(outputs, path: str) -> None:
 
 
 # Add a helper to atomically write the manifest so periodic saves are safe.
-def write_manifest_atomic(run_dir: Path, summary: dict, total_lines_processed: int, start_inf: float, start_time: float, lora_weight_path: str):
+def write_manifest_atomic(run_dir: Path, summary: dict, total_lines_processed: int, start_inf: float, start_time: float, lora_weight_path: str, cli_args: Optional[dict] = None):
     """Write the run manifest to run_dir/manifest.json atomically.
 
     Args:
@@ -70,6 +69,8 @@ def write_manifest_atomic(run_dir: Path, summary: dict, total_lines_processed: i
         "total_inference_time_seconds": round(time() - start_inf, 3),
         "total_time_seconds": round(time() - start_time, 3)
     }
+    # Include CLI arguments in the manifest for reproducibility (empty dict if None)
+    manifest["cli_args"] = cli_args if cli_args is not None else {}
     tmp_path = run_dir / "manifest.json.tmp"
     final_path = run_dir / "manifest.json"
     # Write using UTF-8 and then rename to be atomic on most platforms
@@ -153,9 +154,50 @@ def load_model_and_tokenizer(use_lora: bool = True, lora_weight_path: str = "che
     model.eval()
     return model, tokenizer, device
 
+def run_inference(texts, model, tokenizer, device, batch_size=BATCH_SIZE):
+    """New version of run_inference with batching, produces strange outputs.
+    Without padding_side='left' it works only for batch_size=1."""
+    if not texts:
+        return [], []
 
-def run_inference(texts, model, tokenizer, device, batch_size: int = BATCH_SIZE):
-    """Batched inference: tokenize and generate in minibatches of `batch_size`.
+    # Fix weird output with left-padding instead of right-padding
+    tokenizer.padding_side = "left"
+    tokenizer.pad_token = tokenizer.pad_token or tokenizer.eos_token
+
+    prompts = [
+        f"{tokenizer.bos_token or ''}"
+        f"### Text:\n{t.strip()}\n\n### Question:\nIs the above text steganographic?\n\n### Answer:\n"
+        for t in texts
+    ]
+
+    answers, token_ids = [], []
+
+    for i in range(0, len(prompts), batch_size):
+        enc = tokenizer(
+            prompts[i:i + batch_size],
+            return_tensors="pt",
+            padding=True
+        ).to(device)
+
+        gen = model.generate(
+            **enc,
+            max_new_tokens=10,
+            min_new_tokens=2,
+            do_sample=False,
+            return_dict_in_generate=True,
+            output_scores=False
+        )
+
+        for seq in gen.sequences:
+            gen_ids = seq[enc.input_ids.shape[1]:]
+            token_ids.append(gen_ids.tolist())
+            answers.append(tokenizer.decode(gen_ids, skip_special_tokens=True).strip())
+
+    return answers, token_ids
+
+def run_inference_00(texts, model, tokenizer, device, batch_size: int = BATCH_SIZE):
+    """Old version of run_inference, more verbose.
+    Batched inference: tokenize and generate in minibatches of `batch_size`.
 
     Returns (answers, token_ids_lists) preserving input order.
     """
@@ -211,7 +253,7 @@ def run_inference(texts, model, tokenizer, device, batch_size: int = BATCH_SIZE)
     return answers, token_ids_lists
 
 
-def run_all_tests(nmax: int = -1, lora_weight_path: str = "checkpoint-22000", print_tokens: bool = False, use_lora: bool = True, manifest_threshold: int = 1000, dry_run: bool = False):
+def run_all_tests(nmax: int = -1, lora_weight_path: str = "checkpoint-22000", print_tokens: bool = False, use_lora: bool = True, manifest_threshold: int = 1000, dry_run: bool = False, cli_args: Optional[dict] = None):
     """Top-level pipeline (no args):
     - Creates logs/ if missing
     - Creates a new run_X folder inside logs/
@@ -315,7 +357,7 @@ def run_all_tests(nmax: int = -1, lora_weight_path: str = "checkpoint-22000", pr
 
                     # Write manifest periodically every `manifest_threshold` outputs.
                     while total_lines_processed >= next_manifest_threshold:
-                        write_manifest_atomic(run_dir, summary, total_lines_processed, start_inf, start_time, lora_weight_path)
+                        write_manifest_atomic(run_dir, summary, total_lines_processed, start_inf, start_time, lora_weight_path, cli_args=cli_args)
                         print(f"Wrote periodic manifest at {total_lines_processed} total lines (threshold {next_manifest_threshold}).")
                         next_manifest_threshold += chunk_size
                 processed_files += 1
@@ -325,8 +367,8 @@ def run_all_tests(nmax: int = -1, lora_weight_path: str = "checkpoint-22000", pr
                 continue
         summary[rel_dataset] = f"{processed_files} files"
 
-    # Save a small manifest for the run (final write)
-    write_manifest_atomic(run_dir, summary, total_lines_processed, start_inf, start_time, lora_weight_path)
+    # Save a small manifest for the run (final write) including CLI args
+    write_manifest_atomic(run_dir, summary, total_lines_processed, start_inf, start_time, lora_weight_path, cli_args=cli_args)
     print("Run finished. Summary:", summary)
 
 
@@ -339,7 +381,7 @@ if __name__ == "__main__":
     parser.add_argument("--print-tokens", action="store_true", dest="print_tokens",
                         help="write per-output token id JSONL files next to the .txt outputs")
     # If set, do NOT load LoRA weights (i.e. use base model only)
-    parser.add_argument("--no-lora", action="store_true", dest="no_lora", default=True, help="use LoRA weights (default: True)")
+    parser.add_argument("--no-lora", action="store_true", dest="no_lora", help="use LoRA weights (default: use LoRA)")
     # How often (in number of outputs) to write the run manifest
     parser.add_argument("--manifest-threshold", dest="manifest_threshold", type=int, default=1000,
                         help="number of outputs between periodic manifest writes (default 1000)")
@@ -347,4 +389,5 @@ if __name__ == "__main__":
     parser.add_argument("--dry-run", dest="dry_run", action="store_true", default=False,
                         help="simulate generation without loading model (for testing manifest/output writes)")
     args = parser.parse_args()
-    run_all_tests(nmax=args.nmax, lora_weight_path=args.lora_path, print_tokens=args.print_tokens, use_lora=not args.no_lora, manifest_threshold=args.manifest_threshold, dry_run=args.dry_run)
+    # Pass all parsed CLI argument values into the run manifest for reproducibility
+    run_all_tests(nmax=args.nmax, lora_weight_path=args.lora_path, print_tokens=args.print_tokens, use_lora=not args.no_lora, manifest_threshold=args.manifest_threshold, dry_run=args.dry_run, cli_args=vars(args))
