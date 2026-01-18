@@ -7,6 +7,7 @@ Test LoRA fine-tuned Llama model for steganographic text detection
 from time import time
 start = time()
 import json
+import torch
 from transformers import LlamaForCausalLM, LlamaTokenizer
 from peft import (
     LoraConfig,
@@ -22,8 +23,8 @@ from utils import get_device, get_root_dir
 
 from pathlib import Path
 
-# New: prefer 64 for A100 throughput
-BATCH_SIZE = 64
+# Prefer 32 for A100 throughput
+BATCH_SIZE = 32
 
 
 def read_txt_lines(path: str):
@@ -113,6 +114,7 @@ def load_model_and_tokenizer(use_lora: bool = True, lora_weight_path: str = "che
 
     model = LlamaForCausalLM.from_pretrained(
         model_name_or_path,
+        torch_dtype=torch.bfloat16,
         device_map="auto",
     )
     tokenizer = LlamaTokenizer.from_pretrained(model_name_or_path)
@@ -172,6 +174,8 @@ def run_inference(texts, model, tokenizer, device, batch_size=BATCH_SIZE):
 
     answers, token_ids = [], []
 
+    model.eval()
+
     for i in range(0, len(prompts), batch_size):
         enc = tokenizer(
             prompts[i:i + batch_size],
@@ -179,19 +183,24 @@ def run_inference(texts, model, tokenizer, device, batch_size=BATCH_SIZE):
             padding=True
         ).to(device)
 
-        gen = model.generate(
-            **enc,
-            max_new_tokens=10,
-            min_new_tokens=2,
-            do_sample=False,
-            return_dict_in_generate=True,
-            output_scores=False
-        )
+        with torch.inference_mode():
+            gen = model.generate(
+                **enc,
+                max_new_tokens=10,
+                min_new_tokens=2,
+                do_sample=False,
+                return_dict_in_generate=True,
+                output_scores=False
+            )
 
         for seq in gen.sequences:
             gen_ids = seq[enc.input_ids.shape[1]:]
             token_ids.append(gen_ids.tolist())
             answers.append(tokenizer.decode(gen_ids, skip_special_tokens=True).strip())
+
+        # Helps fragmentation in long jobs
+        del enc, gen
+        torch.cuda.empty_cache()
 
     return answers, token_ids
 
@@ -208,6 +217,13 @@ def run_all_tests(nmax: int = -1, lora_weight_path: str = "checkpoint-22000", pr
         print_tokens: whether to print generated token IDs to console
         use_lora: whether to load LoRA weights (fine-tuned weights from a checkpoint) into the model
     """
+    # Backwards-compatible: if the caller passed a cover_only flag (from CLI), accept it from cli_args
+    # Prefer explicit parameter in the future; for now, check cli_args dict if provided.
+    cover_only = False
+    if isinstance(cli_args, dict) and 'cover_only' in cli_args:
+        cover_only = bool(cli_args.get('cover_only'))
+
+    # The function signature does not accept cover_only directly to minimize changes to other call sites.
     try:
         # try to resolve project root via utils.get_root_dir()
         root = Path(get_root_dir())
@@ -250,7 +266,15 @@ def run_all_tests(nmax: int = -1, lora_weight_path: str = "checkpoint-22000", pr
         out_dataset_dir = run_dir / rel_dataset
         out_dataset_dir.mkdir(parents=True, exist_ok=True)
         processed_files = 0
-        for txt_file in sorted(dataset_dir.glob("*.txt")):
+        # Choose which files to iterate based on cover_only flag
+        if cover_only:
+            # Only process a file named exactly 'cover.txt' if it exists in the dataset dir
+            candidate = dataset_dir / 'cover.txt'
+            txt_files = [candidate] if candidate.exists() else []
+        else:
+            txt_files = sorted(dataset_dir.glob("*.txt"))
+
+        for txt_file in txt_files:
             print(f"Processing {txt_file}...")
             texts = read_txt_lines(str(txt_file))
             # apply nmax truncation if requested
@@ -331,6 +355,9 @@ if __name__ == "__main__":
     # Quick dry-run to test file/manifest writes without loading the ML model
     parser.add_argument("--dry-run", dest="dry_run", action="store_true", default=False,
                         help="simulate generation without loading model (for testing manifest/output writes)")
+    # If set, only process files named 'cover.txt' in each dataset folder
+    parser.add_argument("--cover-only", dest="cover_only", action="store_true", default=False,
+                        help="only run inference on files named 'cover.txt' (default: process all .txt files)")
     args = parser.parse_args()
     # Pass all parsed CLI argument values into the run manifest for reproducibility
     run_all_tests(nmax=args.nmax, lora_weight_path=args.lora_path, print_tokens=args.print_tokens, use_lora=not args.no_lora, manifest_threshold=args.manifest_threshold, dry_run=args.dry_run, cli_args=vars(args))

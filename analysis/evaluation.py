@@ -89,7 +89,7 @@ def convert_folder(folder_path: Path, verbose: bool = False) -> None:
                 convert_txt_file(path, verbose=verbose)
 
 def main() -> None:
-    convert_folder(Path("logs/run_14"), verbose=True)
+    convert_folder(Path("logs/run_28"), verbose=True)
 
 if __name__ == "__main__":
     main()
