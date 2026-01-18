@@ -195,63 +195,6 @@ def run_inference(texts, model, tokenizer, device, batch_size=BATCH_SIZE):
 
     return answers, token_ids
 
-def run_inference_00(texts, model, tokenizer, device, batch_size: int = BATCH_SIZE):
-    """Old version of run_inference, more verbose.
-    Batched inference: tokenize and generate in minibatches of `batch_size`.
-
-    Returns (answers, token_ids_lists) preserving input order.
-    """
-    answers = []
-    token_ids_lists = []
-    if not texts:
-        return answers, token_ids_lists
-
-    # Ensure tokenizer has a pad token for batching
-    if getattr(tokenizer, 'pad_token_id', None) is None:
-        tokenizer.pad_token = tokenizer.eos_token
-
-    # Build full prompts for each input
-    prompts = []
-    for text in texts:
-        prompt = f"### Text:\n{text.strip()}\n\n### Question:\nIs the above text steganographic?\n\n### Answer:\n"
-        if getattr(tokenizer, 'bos_token', None) is not None:
-            prompt = tokenizer.bos_token + prompt
-        prompts.append(prompt)
-
-    # Process in minibatches to maximize GPU throughput
-    for start in range(0, len(prompts), batch_size):
-        batch_prompts = prompts[start:start + batch_size]
-        # Tokenize the batch with padding so attention masks reflect real lengths
-        inputs = tokenizer(batch_prompts, return_tensors='pt', padding=True, truncation=False)
-        # Move tensors to device
-        inputs = {k: v.to(device) for k, v in inputs.items()}
-
-        # Compute per-example input lengths (number of non-padded tokens)
-        if 'attention_mask' in inputs:
-            input_lens = inputs['attention_mask'].sum(dim=1)
-        else:
-            input_lens = inputs['input_ids'].ne(tokenizer.pad_token_id).sum(dim=1)
-
-        # Generate for the full batch
-        gen = model.generate(**inputs, num_beams=1, do_sample=False, max_new_tokens=10, min_new_tokens=2)
-
-        # For each sequence in the batch, slice off the prompt tokens and decode
-        for i in range(gen.shape[0]):
-            seq = gen[i]
-            in_len = int(input_lens[i].item())
-            gen_ids = seq[in_len:]
-            try:
-                ids_list = gen_ids.cpu().tolist()
-            except Exception:
-                ids_list = list(gen_ids)
-            token_ids_lists.append(ids_list)
-
-            out = tokenizer.decode(gen_ids, skip_special_tokens=True, clean_up_tokenization_spaces=True).strip()
-            out = out.encode('utf-8', errors='replace').decode('utf-8', errors='replace')
-            answers.append(out)
-
-    return answers, token_ids_lists
-
 
 def run_all_tests(nmax: int = -1, lora_weight_path: str = "checkpoint-22000", print_tokens: bool = False, use_lora: bool = True, manifest_threshold: int = 1000, dry_run: bool = False, cli_args: Optional[dict] = None):
     """Top-level pipeline (no args):
