@@ -49,7 +49,7 @@ def save_outputs_to_file(outputs, path: str) -> None:
 
 
 # Add a helper to atomically write the manifest so periodic saves are safe.
-def write_manifest_atomic(run_dir: Path, summary: dict, total_lines_processed: int, start_inf: float, start_time: float, lora_weight_path: str, cli_args: Optional[dict] = None):
+def write_manifest_atomic(run_dir: Path, summary: dict, total_lines_processed: int, start_inf: float, start_time: float, cli_args: Optional[dict] = None):
     """Write the run manifest to run_dir/manifest.json atomically.
 
     Args:
@@ -58,11 +58,9 @@ def write_manifest_atomic(run_dir: Path, summary: dict, total_lines_processed: i
         total_lines_processed: integer total of lines processed so far
         start_inf: inference start time (seconds since epoch)
         start_time: overall run start time (seconds since epoch)
-        lora_weight_path: descriptive path used for this run
     """
     manifest = {
         "run_dir": str(run_dir),
-        "lora_weight_path": lora_weight_path,
         # Use ISO 8601 UTC timestamp without microseconds
         "timestamp": datetime.now(timezone.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "summary": summary,
@@ -99,7 +97,7 @@ def get_next_run_dir(logs_root: Path) -> Path:
     return logs_root / f"run_{next_n}"
 
 
-def load_model_and_tokenizer(use_lora: bool = True, lora_weight_path: str = ""):
+def load_model_and_tokenizer(use_lora: bool = True):
     """
     New implementation of load_model_and_tokenizer with improved LoRA loading.
     """
@@ -180,7 +178,7 @@ def run_inference(texts, model, tokenizer, device, batch_size=BATCH_SIZE):
     return answers, token_ids
 
 
-def run_all_tests(nmax: int = -1, lora_weight_path: str = "checkpoint-22000", print_tokens: bool = False, use_lora: bool = True, manifest_threshold: int = 1000, dry_run: bool = False, cli_args: Optional[dict] = None):
+def run_all_tests(nmax: int = -1, print_tokens: bool = False, use_lora: bool = True, manifest_threshold: int = 1000, dry_run: bool = False, cli_args: Optional[dict] = None):
     """Top-level pipeline (no args):
     - Creates logs/ if missing
     - Creates a new run_X folder inside logs/
@@ -188,7 +186,6 @@ def run_all_tests(nmax: int = -1, lora_weight_path: str = "checkpoint-22000", pr
 
     Args:
         nmax: maximum number of lines to take from each .txt file. If -1, take all lines.
-        lora_weight_path: path to the LoRA weights folder
         print_tokens: whether to print generated token IDs to console
         use_lora: whether to load LoRA weights (fine-tuned weights from a checkpoint) into the model
     """
@@ -224,7 +221,7 @@ def run_all_tests(nmax: int = -1, lora_weight_path: str = "checkpoint-22000", pr
     model = tokenizer = device = None
     if not dry_run:
         try:
-            model, tokenizer, device = load_model_and_tokenizer(use_lora=use_lora, lora_weight_path=lora_weight_path)
+            model, tokenizer, device = load_model_and_tokenizer(use_lora=use_lora)
         except Exception as e:
             print("Failed to load model/tokenizer:", e)
             return
@@ -299,7 +296,7 @@ def run_all_tests(nmax: int = -1, lora_weight_path: str = "checkpoint-22000", pr
 
                     # Write manifest periodically every `manifest_threshold` outputs.
                     while total_lines_processed >= next_manifest_threshold:
-                        write_manifest_atomic(run_dir, summary, total_lines_processed, start_inf, start_time, lora_weight_path, cli_args=cli_args)
+                        write_manifest_atomic(run_dir, summary, total_lines_processed, start_inf, start_time, cli_args=cli_args)
                         print(f"Wrote periodic manifest at {total_lines_processed} total lines (threshold {next_manifest_threshold}).")
                         next_manifest_threshold += chunk_size
                 processed_files += 1
@@ -310,15 +307,13 @@ def run_all_tests(nmax: int = -1, lora_weight_path: str = "checkpoint-22000", pr
         summary[rel_dataset] = f"{processed_files} files"
 
     # Save a small manifest for the run (final write) including CLI args
-    write_manifest_atomic(run_dir, summary, total_lines_processed, start_inf, start_time, lora_weight_path, cli_args=cli_args)
+    write_manifest_atomic(run_dir, summary, total_lines_processed, start_inf, start_time, cli_args=cli_args)
     print("Run finished. Summary:", summary)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run steganographic detection tests over text datasets")
     parser.add_argument("-nmax", type=int, default=-1, help="maximum number of lines to read from each .txt file (-1 for all)")
-    # Path to LoRA weights (folder containing pytorch_model.bin or similar)
-    parser.add_argument("--lora-path",dest='lora_path', type=str, default="checkpoint-22000", help="path to the LoRA weights folder (default: checkpoint-22000)")
     # If set, write a .tokens.jsonl file next to each generated .txt with token id arrays per line
     parser.add_argument("--print-tokens", action="store_true", dest="print_tokens",
                         help="write per-output token id JSONL files next to the .txt outputs")
@@ -335,4 +330,4 @@ if __name__ == "__main__":
                         help="only run inference on files named 'cover.txt' (default: process all .txt files)")
     args = parser.parse_args()
     # Pass all parsed CLI argument values into the run manifest for reproducibility
-    run_all_tests(nmax=args.nmax, lora_weight_path=args.lora_path, print_tokens=args.print_tokens, use_lora=not args.no_lora, manifest_threshold=args.manifest_threshold, dry_run=args.dry_run, cli_args=vars(args))
+    run_all_tests(nmax=args.nmax, print_tokens=args.print_tokens, use_lora=not args.no_lora, manifest_threshold=args.manifest_threshold, dry_run=args.dry_run, cli_args=vars(args))
