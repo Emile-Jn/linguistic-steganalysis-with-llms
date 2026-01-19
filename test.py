@@ -99,66 +99,6 @@ def get_next_run_dir(logs_root: Path) -> Path:
     return logs_root / f"run_{next_n}"
 
 
-def load_model_and_tokenizer_old(use_lora: bool = True, lora_weight_path: str = "checkpoint-22000"):
-    """Old version
-    Load Llama model, tokenizer and optionally apply LoRA weights. Returns (model, tokenizer, device).
-    """
-    # Import torch lazily so running parts of the script that don't need the model
-    # (e.g. listing files or dry-run) won't require PyTorch to be installed.
-    try:
-        import torch
-    except Exception as e:
-        raise RuntimeError("PyTorch is required to load the model. Install torch or run with --dry-run") from e
-
-    device = get_device()
-    print("Using device:", device)
-    model_name_or_path = "linhvu/decapoda-research-llama-7b-hf"
-    print("Using model:", model_name_or_path)
-
-    model = LlamaForCausalLM.from_pretrained(
-        model_name_or_path,
-        torch_dtype=torch.bfloat16,
-        device_map="auto",
-    )
-    tokenizer = LlamaTokenizer.from_pretrained(model_name_or_path)
-
-    # debugging: check that eos tokens match
-    print('\n- - - - - Debug info - - - - -\n')
-    print(tokenizer.special_tokens_map)
-    print(tokenizer.eos_token_id)
-    print(model.config.eos_token_id)
-    print('\n- - - - - - - - - - -  - - - -\n')
-
-    # Load LoRA configuration and weights
-    # Ensure JSON config files are read with explicit UTF-8 encoding
-    with open("configs/TrainLM_llama-7b-hf.json", "r", encoding="utf-8") as mf:
-        model_config = json.load(mf)
-    with open("configs/lora_config.json", "r", encoding="utf-8") as lf:
-        lora_hyperparams = json.load(lf)
-    target_modules = ["query_key_value"]
-    if model_config.get('model_type') == "llama":
-        target_modules = lora_hyperparams.get('lora_target_modules', target_modules)
-    config = LoraConfig(
-        r=lora_hyperparams['lora_r'],
-        lora_alpha=lora_hyperparams['lora_alpha'],
-        target_modules=target_modules,
-        lora_dropout=lora_hyperparams['lora_dropout'],
-        bias="none",
-        task_type="CAUSAL_LM",
-    )
-    model = get_peft_model(model, config)
-
-    if use_lora:
-        lora_weight_path = f"adapter/{lora_weight_path}/pytorch_model.bin"
-        if Path(lora_weight_path).exists():
-            ckpt_name = lora_weight_path
-            lora_weight = torch.load(ckpt_name)
-            set_peft_model_state_dict(model, lora_weight)
-        else:
-            print(f"Warning: LoRA weight path adapter/{lora_weight_path}/pytorch_model.bin does not exist; continuing without LoRA weights")
-    model.eval()
-    return model, tokenizer, device
-
 def load_model_and_tokenizer(use_lora: bool = True, lora_weight_path: str = ""):
     """
     New implementation of load_model_and_tokenizer with improved LoRA loading.
