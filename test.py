@@ -13,6 +13,7 @@ from peft import (
     LoraConfig,
     get_peft_model,
     set_peft_model_state_dict,
+    PeftModel,
 )
 import argparse
 from typing import Optional
@@ -98,8 +99,10 @@ def get_next_run_dir(logs_root: Path) -> Path:
     return logs_root / f"run_{next_n}"
 
 
-def load_model_and_tokenizer(use_lora: bool = True, lora_weight_path: str = "checkpoint-22000"):
-    """Load Llama model, tokenizer and optionally apply LoRA weights. Returns (model, tokenizer, device)."""
+def load_model_and_tokenizer_old(use_lora: bool = True, lora_weight_path: str = "checkpoint-22000"):
+    """Old version
+    Load Llama model, tokenizer and optionally apply LoRA weights. Returns (model, tokenizer, device).
+    """
     # Import torch lazily so running parts of the script that don't need the model
     # (e.g. listing files or dry-run) won't require PyTorch to be installed.
     try:
@@ -146,15 +149,47 @@ def load_model_and_tokenizer(use_lora: bool = True, lora_weight_path: str = "che
     model = get_peft_model(model, config)
 
     if use_lora:
-        lora_weight_path = f"{lora_weight_path}/pytorch_model.bin"
+        lora_weight_path = f"adapter/{lora_weight_path}/pytorch_model.bin"
         if Path(lora_weight_path).exists():
             ckpt_name = lora_weight_path
             lora_weight = torch.load(ckpt_name)
             set_peft_model_state_dict(model, lora_weight)
         else:
-            print(f"Warning: LoRA weight path {lora_weight_path} does not exist; continuing without LoRA weights")
+            print(f"Warning: LoRA weight path adapter/{lora_weight_path}/pytorch_model.bin does not exist; continuing without LoRA weights")
     model.eval()
     return model, tokenizer, device
+
+def load_model_and_tokenizer(use_lora: bool = True, lora_weight_path: str = ""):
+    """
+    New implementation of load_model_and_tokenizer with improved LoRA loading.
+    """
+    base_model_path = "linhvu/decapoda-research-llama-7b-hf"
+    print("Using base model:", base_model_path)
+
+    if use_lora:
+        adapter_path = "adapter"
+        tokenizer = LlamaTokenizer.from_pretrained(adapter_path)
+    else:
+        tokenizer = LlamaTokenizer.from_pretrained(base_model_path)
+
+    model = LlamaForCausalLM.from_pretrained(
+        base_model_path,
+        load_in_8bit=True,
+        device_map="auto",
+    )
+
+    if use_lora:
+        model = PeftModel.from_pretrained(model, adapter_path)
+
+    # debugging: check that eos tokens match
+    print('\n- - - - - Debug info - - - - -\n')
+    print(tokenizer.special_tokens_map)
+    print(tokenizer.eos_token_id)
+    print(model.config.eos_token_id)
+    print('\n- - - - - - - - - - -  - - - -\n')
+
+    model.eval()
+    return model, tokenizer, get_device()
 
 def run_inference(texts, model, tokenizer, device, batch_size=BATCH_SIZE):
     """New version of run_inference with batching, produces strange outputs.
