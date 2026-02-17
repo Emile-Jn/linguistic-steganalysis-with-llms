@@ -5,6 +5,9 @@ Repo: Emile's version
 Research paper: [*Towards Next-Generation Steganalysis: LLMs
 Unleash the Power of Detecting Steganography*](https://arxiv.org/abs/2405.09090)
 
+### Note: outputs from run_28 were duplicated and added to run_30 for convenience.
+
+
 ## Prelimilaries
 
 ### 1. Virtual Environment
@@ -18,6 +21,13 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 uv sync
 ```
 
+## What you can do with this repo
+
+- Use the trained GS-llama model to get binary classification metrics on a pair of datasets. 
+This is done in `test.py`.
+By default `data/ac/stego.txt` and `data/ac/cover.txt` are used, but you can change the path to any pair of datasets.
+
+# Original repo description
 
 ### 2. Models
 GS-llama Model can be downloaded from [https://cloud.tsinghua.edu.cn/d/55a2efbf51054cf0aedb/](https://cloud.tsinghua.edu.cn/d/55a2efbf51054cf0aedb/), this is a output directory contained the lora weights of GS-llama.

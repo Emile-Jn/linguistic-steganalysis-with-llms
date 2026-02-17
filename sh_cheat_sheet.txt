@@ -1,0 +1,33 @@
+# Connect to the cluster:
+# 1. activate the TU VPN (Settings > VPN > VPN TU Wien)
+# 2. Open terminal
+# 3. enter ssh datalab
+
+# Check current jobs:
+squeue
+# Check current node availability:
+sinfo
+# Check my running or finished jobs:
+sacct
+# Cancel my jobs:
+scancel --user=e12229987
+
+
+# Run my code:
+sbatch run.sh test.py
+# Request the a100:
+sbatch --partition=GPU-a100 run.sh test.py -nmax 5
+
+
+# Obsolete options:
+
+# Try other checkpoints:
+sbatch run.sh test.py -nmax 5 --lora-path checkpoint-21000
+# Request the a100:
+sbatch --partition=GPU-a100 run.sh test.py -nmax 5
+# Steganalysis only on cover texts:
+sbatch run.sh test.py --cover-only
+
+
+# Open the last output:
+openlast

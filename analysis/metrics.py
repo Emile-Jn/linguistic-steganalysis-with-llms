@@ -97,11 +97,18 @@ def evaluate_predictions(folder_path: Path):
     print(report)
     return report
 
-def main():
-    folder = Path("predictions/run_14/ac")
+def main(run_name: str = None, subset: str = "ac"):
+    """Main function to evaluate a specific run and save the metrics report."""
+    folder = Path(f"predictions/{run_name}/{subset}")
     report = evaluate_predictions(folder)
-    with open("metrics_report.txt", "w", encoding="utf-8") as f:
-        f.write(report)
+
+    # Ensure the top-level metrics directory exists and write the report there.
+    # We keep a per-run subdirectory to avoid filename collisions: metrics/<run_name>/<subset>.txt
+    out_dir = Path("metrics") / f"{run_name}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_file = out_dir / f"{subset}.txt"
+    out_file.write_text(report, encoding="utf-8")
+
 
 def main2():
     """Simple CLI entrypoint. Usage: python -m analysis.metrics <folder_path>"""
@@ -122,4 +129,4 @@ def main2():
 
 
 if __name__ == "__main__":
-    main()
+    main("run_30", 'hc5')

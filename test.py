@@ -205,7 +205,7 @@ def run_all_tests(nmax: int = -1, print_tokens: bool = False, use_lora: bool = T
     # Track total lines processed and timing for the whole run
     total_lines_processed = 0
     start_time = time()
-    data_root = root / "data"
+    data_root = root / "data" # TODO: change to parameter if needed
     logs_root = root / "logs"
 
     # Decide run directory name. Assumption: use underscore form 'run_X' (safe on filesystems).

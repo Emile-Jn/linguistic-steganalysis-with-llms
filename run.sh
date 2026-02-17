@@ -2,6 +2,7 @@
 
 # The following lines are SBATCH directives, they are read by the SLURM scheduler
 
+#SBATCH --job-name=steganalysis
 #SBATCH --partition=GPU-a100
 #SBATCH --gres=gpu:1      # request 1 GPU
 #SBATCH --nodes=1

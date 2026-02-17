@@ -41,7 +41,7 @@ def convert_txt_file(file_path: Path, verbose: bool = False) :
     print(f"Processing {file_path} -> unexpected lines: {len(unexpected_lines)}")
     if verbose:
         print("Unexpected lines:")
-        for ul in unexpected_lines:
+        for ul in set(unexpected_lines):
             print(f"  {ul}")
         print('\n- - - - - -\n')
 
@@ -89,7 +89,7 @@ def convert_folder(folder_path: Path, verbose: bool = False) -> None:
                 convert_txt_file(path, verbose=verbose)
 
 def main() -> None:
-    convert_folder(Path("logs/run_28"), verbose=True)
+    convert_folder(Path("logs/run_30"), verbose=True)
 
 if __name__ == "__main__":
     main()
