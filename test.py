@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 """
 Test LoRA fine-tuned Llama model for steganographic text detection
+
+run this on the slurm cluster:
+sbatch --partition=GPU-a100 run.sh test.py -nmax 5
 """
 
 # Third-party modules
@@ -113,13 +116,6 @@ def load_model_and_tokenizer(use_lora: bool = True):
 
     if use_lora:
         model = PeftModel.from_pretrained(model, adapter_path)
-
-    # debugging: check that eos tokens match
-    print('\n- - - - - Debug info - - - - -\n')
-    print(tokenizer.special_tokens_map)
-    print(tokenizer.eos_token_id)
-    print(model.config.eos_token_id)
-    print('\n- - - - - - - - - - -  - - - -\n')
 
     model.eval()
     return model, tokenizer, get_device()
@@ -406,8 +402,13 @@ def run_all_tests(nmax: int = -1, print_tokens: bool = False, use_lora: bool = T
     # Process .txt files sitting directly in data_root, then each subdirectory.
     dirs_to_process = [data_root] + sorted([d for d in data_root.iterdir() if d.is_dir()])
     for dataset_dir in dirs_to_process:
-        processed_files, _ = process_dataset_dir(dataset_dir, run_dir, **common_kwargs)
-        summary[dataset_dir.name] = f"{processed_files} files"
+        has_txt = (
+            (dataset_dir / 'cover.txt').exists() if cover_only
+            else any(dataset_dir.glob("*.txt"))
+        )
+        if has_txt:
+            processed_files, _ = process_dataset_dir(dataset_dir, run_dir, **common_kwargs)
+            summary[dataset_dir.name] = f"{processed_files} files"
 
     write_manifest_atomic(run_dir, summary, total_lines_processed, start_inf, start_time, cli_args=cli_args)
     print("Run finished. Summary:", summary)
