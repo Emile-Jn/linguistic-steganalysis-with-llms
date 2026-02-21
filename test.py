@@ -173,155 +173,242 @@ def run_inference(texts, model, tokenizer, device, batch_size=BATCH_SIZE):
     return answers, token_ids
 
 
-def run_all_tests(nmax: int = -1, print_tokens: bool = False, use_lora: bool = True, manifest_threshold: int = 1000, dry_run: bool = False, cli_args: Optional[dict] = None):
-    """Top-level pipeline (no args):
-    - Creates logs/ if missing
-    - Creates a new run_X folder inside logs/
-    - For each subfolder in data/, runs inference on every .txt file and writes outputs preserving folder structure
+def _resolve_paths(cli_args: Optional[dict]) -> tuple[Path, Path]:
+    """Return (data_root, logs_root) derived from the project root and optional CLI args.
 
     Args:
-        nmax: maximum number of lines to take from each .txt file. If -1, take all lines.
-        print_tokens: whether to print generated token IDs to console
-        use_lora: whether to load LoRA weights (fine-tuned weights from a checkpoint) into the model
-    """
-    # Backwards-compatible: if the caller passed a cover_only flag (from CLI), accept it from cli_args
-    # Prefer explicit parameter in the future; for now, check cli_args dict if provided.
-    cover_only = False
-    if isinstance(cli_args, dict) and 'cover_only' in cli_args:
-        cover_only = bool(cli_args.get('cover_only'))
+        cli_args: parsed CLI arguments dict; may contain 'data_path' to override the default.
 
-    # The function signature does not accept cover_only directly to minimize changes to other call sites.
+    Returns:
+        A tuple of (data_root, logs_root) as absolute Path objects.
+    """
     try:
-        # try to resolve project root via utils.get_root_dir()
         root = Path(get_root_dir())
     except Exception:
-        # fallback to current working directory when project name lookup fails
         root = Path.cwd()
-    # Track total lines processed and timing for the whole run
-    total_lines_processed = 0
-    start_time = time()
-    if isinstance(cli_args, dict) and 'data_path' in cli_args:
-        data_root = Path(root / "data" / cli_args.get('data_path'))
+
+    if isinstance(cli_args, dict) and cli_args.get('data_path'):
+        data_root = root / "data" / cli_args['data_path']
     else:
-        data_root = root / "data" / "baseline" # TODO: change to parameter if needed
+        data_root = root / "data" / "baseline"
+
     logs_root = root / "logs"
+    return data_root, logs_root
 
-    # Decide run directory name. Assumption: use underscore form 'run_X' (safe on filesystems).
-    run_dir = get_next_run_dir(logs_root)
-    run_dir.mkdir(parents=True, exist_ok=True)
-    print(f"Creating new run directory: {run_dir}")
 
-    # Initialize next threshold for periodic manifest writes
-    # The threshold is configurable via the `manifest_threshold` parameter (default 1000)
-    next_manifest_threshold = int(manifest_threshold) if manifest_threshold and manifest_threshold > 0 else 1000
+def _load_model(use_lora: bool, dry_run: bool):
+    """Load and return (model, tokenizer, device), or (None, None, None) in dry-run mode.
 
-    # Load model and tokenizer once (skip if dry_run)
-    model = tokenizer = device = None
-    if not dry_run:
-        try:
-            model, tokenizer, device = load_model_and_tokenizer(use_lora=use_lora)
-        except Exception as e:
-            print("Failed to load model/tokenizer:", e)
-            return
+    Args:
+        use_lora: whether to apply the LoRA adapter on top of the base model.
+        dry_run: when True, skip loading entirely and return None placeholders.
 
-    summary = {}
+    Returns:
+        Tuple of (model, tokenizer, device). All None when dry_run is True.
 
+    Raises:
+        SystemExit-equivalent: prints an error and returns None triplet on failure.
+    """
+    if dry_run:
+        return None, None, None
+    try:
+        return load_model_and_tokenizer(use_lora=use_lora)
+    except Exception as e:
+        print("Failed to load model/tokenizer:", e)
+        return None, None, None
+
+
+def _process_txt_file(
+    txt_file: Path,
+    out_dir: Path,
+    model,
+    tokenizer,
+    device,
+    *,
+    nmax: int,
+    chunk_size: int,
+    print_tokens: bool,
+    dry_run: bool,
+    on_chunk_done,
+) -> int:
+    """Run inference on a single .txt file and write results incrementally.
+
+    Args:
+        txt_file: input text file to process.
+        out_dir: directory where the output file (and optional tokens JSONL) will be written.
+        model, tokenizer, device: loaded model components (may be None in dry-run mode).
+        nmax: maximum number of input lines to process; -1 means no limit.
+        chunk_size: number of lines to process per batch before flushing to disk.
+        print_tokens: if True, write a parallel .tokens.jsonl file with generated token IDs.
+        dry_run: if True, produce fake outputs without calling the model.
+        on_chunk_done: callback(lines_in_chunk: int) called after each chunk is written,
+                       used by the caller to update counters and write periodic manifests.
+
+    Returns:
+        Number of lines processed (0 on failure or empty file).
+    """
+    print(f"Processing {txt_file}...")
+    texts = read_txt_lines(str(txt_file))
+
+    if nmax is not None and nmax != -1 and len(texts) > nmax:
+        texts = texts[:nmax]
+        print(f"  Truncated to first {nmax} lines for {txt_file}")
+
+    if not texts:
+        print(f"  Skipping empty or missing file {txt_file}")
+        return 0
+
+    out_path = out_dir / txt_file.name
+    tokens_path = out_path.with_suffix('.tokens.jsonl')
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    lines_processed = 0
+    wrote_any = False
+    try:
+        for i in range(0, len(texts), chunk_size):
+            chunk = texts[i:i + chunk_size]
+
+            if dry_run:
+                outputs = [f"DRYRUN_OUTPUT_LINE_{j}" for j in range(len(chunk))]
+                token_lists = [[] for _ in chunk]
+            else:
+                outputs, token_lists = run_inference(chunk, model, tokenizer, device, batch_size=BATCH_SIZE)
+
+            mode = 'w' if not wrote_any else 'a'
+            with out_path.open(mode, encoding='utf-8') as of:
+                for out in outputs:
+                    of.write(out.replace('\n', ' ').strip() + '\n')
+
+            if print_tokens:
+                tokens_path.parent.mkdir(parents=True, exist_ok=True)
+                mode_t = 'w' if not wrote_any else 'a'
+                with tokens_path.open(mode_t, encoding='utf-8') as tf:
+                    for ids in token_lists:
+                        tf.write(json.dumps(ids, ensure_ascii=False) + '\n')
+
+            lines_processed += len(chunk)
+            wrote_any = True
+            on_chunk_done(len(chunk))
+
+    except Exception as e:
+        print(f"  Inference failed for {txt_file}: {e}")
+        return 0
+
+    return lines_processed
+
+
+def process_dataset_dir(
+    dataset_dir: Path,
+    out_root: Path,
+    model,
+    tokenizer,
+    device,
+    *,
+    nmax: int,
+    chunk_size: int,
+    cover_only: bool,
+    print_tokens: bool,
+    dry_run: bool,
+    on_chunk_done,
+) -> tuple[int, int]:
+    """Process all .txt files in a single dataset directory.
+
+    Args:
+        dataset_dir: input directory containing .txt files to process.
+        out_root: root output directory; results are written to out_root/dataset_dir.name/.
+        model, tokenizer, device: loaded model components (may be None in dry-run mode).
+        nmax: maximum number of input lines per file; -1 means no limit.
+        chunk_size: lines per inference batch.
+        cover_only: if True, only process a file named exactly 'cover.txt'.
+        print_tokens: if True, write a parallel .tokens.jsonl for each output file.
+        dry_run: if True, produce fake outputs without calling the model.
+        on_chunk_done: callback(lines_in_chunk: int) forwarded to _process_txt_file.
+
+    Returns:
+        A tuple of (processed_files, lines_processed) for this directory.
+    """
+    out_dataset_dir = out_root / dataset_dir.name
+    out_dataset_dir.mkdir(parents=True, exist_ok=True)
+
+    if cover_only:
+        candidate = dataset_dir / 'cover.txt'
+        txt_files = [candidate] if candidate.exists() else []
+    else:
+        txt_files = sorted(dataset_dir.glob("*.txt"))
+
+    processed_files = 0
+    lines_processed = 0
+    for txt_file in txt_files:
+        n = _process_txt_file(
+            txt_file, out_dataset_dir, model, tokenizer, device,
+            nmax=nmax, chunk_size=chunk_size, print_tokens=print_tokens,
+            dry_run=dry_run, on_chunk_done=on_chunk_done,
+        )
+        if n > 0:
+            lines_processed += n
+            processed_files += 1
+
+    return processed_files, lines_processed
+
+
+def run_all_tests(nmax: int = -1, print_tokens: bool = False, use_lora: bool = True, manifest_threshold: int = 1000, dry_run: bool = False, cli_args: Optional[dict] = None):
+    """Top-level pipeline:
+    - Resolves data and logs paths
+    - Creates a new run_X folder inside logs/
+    - Runs inference on every .txt file in data_root and each of its subdirectories,
+      writing outputs that mirror the input directory structure
+
+    Args:
+        nmax: maximum number of lines to take from each .txt file. -1 means all lines.
+        print_tokens: whether to write generated token IDs to a sidecar .tokens.jsonl file.
+        use_lora: whether to load LoRA adapter weights into the model.
+        manifest_threshold: write a periodic manifest every this many output lines.
+        dry_run: skip model loading; produce fake outputs (useful for testing I/O logic).
+        cli_args: parsed CLI arguments dict, embedded in the manifest for reproducibility.
+    """
+    cover_only = bool(cli_args.get('cover_only')) if isinstance(cli_args, dict) else False
+    chunk_size = int(manifest_threshold) if manifest_threshold and manifest_threshold > 0 else 1000
+
+    data_root, logs_root = _resolve_paths(cli_args)
     if not data_root.exists():
         print(f"Data root {data_root} does not exist. Nothing to process.")
         return
 
-    def process_dataset_dir(dataset_dir: Path) -> tuple[int, int]:
-        """Process all .txt files in a single dataset directory.
+    run_dir = get_next_run_dir(logs_root)
+    run_dir.mkdir(parents=True, exist_ok=True)
+    print(f"Creating new run directory: {run_dir}")
 
-        Args:
-            dataset_dir: Path to the dataset subdirectory under data_root.
+    model, tokenizer, device = _load_model(use_lora=use_lora, dry_run=dry_run)
+    if not dry_run and model is None:
+        return
 
-        Returns:
-            A tuple of (processed_files, lines_processed) counts for this directory.
-        """
-        nonlocal next_manifest_threshold
-
-        out_dataset_dir = run_dir / dataset_dir.name
-        out_dataset_dir.mkdir(parents=True, exist_ok=True)
-        processed_files = 0
-        lines_processed = 0
-
-        # Choose which files to iterate based on cover_only flag
-        if cover_only:
-            # Only process a file named exactly 'cover.txt' if it exists in the dataset dir
-            candidate = dataset_dir / 'cover.txt'
-            txt_files = [candidate] if candidate.exists() else []
-        else:
-            txt_files = sorted(dataset_dir.glob("*.txt"))
-
-        for txt_file in txt_files:
-            print(f"Processing {txt_file}...")
-            texts = read_txt_lines(str(txt_file))
-            # apply nmax truncation if requested
-            if nmax is not None and nmax != -1:
-                if len(texts) > nmax:
-                    texts = texts[:nmax]
-                    print(f"  Truncated to first {nmax} lines for {txt_file}")
-            if not texts:
-                print(f"  Skipping empty or missing file {txt_file}")
-                continue
-            # Process the file in chunks so outputs are flushed periodically (including writing
-            # the outputs file and optional token JSONL). This ensures large input files do not
-            # only get written once at the end.
-            chunk_size = int(manifest_threshold) if manifest_threshold and manifest_threshold > 0 else 1000
-            out_path = out_dataset_dir / txt_file.name
-            tokens_path = out_path.with_suffix('.tokens.jsonl')
-            # Ensure parent exists
-            out_path.parent.mkdir(parents=True, exist_ok=True)
-            wrote_any = False
-            try:
-                for i in range(0, len(texts), chunk_size):
-                    chunk = texts[i:i+chunk_size]
-                    # In dry-run mode, simulate outputs quickly without calling the model
-                    if dry_run:
-                        outputs = [f"DRYRUN_OUTPUT_LINE_{j}" for j in range(len(chunk))]
-                        token_lists = [[] for _ in chunk]
-                    else:
-                        # Run batched inference (tokenization+generation). Single call only.
-                        outputs, token_lists = run_inference(chunk, model, tokenizer, device, batch_size=BATCH_SIZE)
-                    # Write outputs to file incrementally. Use 'w' for the first write to
-                    # replace any existing file, then append for subsequent chunks.
-                    mode = 'w' if not wrote_any else 'a'
-                    with out_path.open(mode, encoding='utf-8') as of:
-                        for out in outputs:
-                            of.write(out.replace('\n', ' ').strip() + '\n')
-                    # If requested, append token id lists to the tokens JSONL file
-                    if print_tokens:
-                        tokens_path.parent.mkdir(parents=True, exist_ok=True)
-                        mode_t = 'w' if not wrote_any else 'a'
-                        with tokens_path.open(mode_t, encoding='utf-8') as tf:
-                            for ids in token_lists:
-                                tf.write(json.dumps(ids, ensure_ascii=False) + '\n')
-
-                    # Update counters after chunk saved
-                    lines_processed += len(chunk)
-                    wrote_any = True
-
-                    # Write manifest periodically every `manifest_threshold` outputs.
-                    while total_lines_processed + lines_processed >= next_manifest_threshold:
-                        write_manifest_atomic(run_dir, summary, total_lines_processed + lines_processed, start_inf, start_time, cli_args=cli_args)
-                        print(f"Wrote periodic manifest at {total_lines_processed + lines_processed} total lines (threshold {next_manifest_threshold}).")
-                        next_manifest_threshold += chunk_size
-                processed_files += 1
-            except Exception as e:
-                print(f"  Inference failed for {txt_file}: {e}")
-                # don't count this file as processed
-                continue
-
-        return processed_files, lines_processed
-
+    summary: dict = {}
+    total_lines_processed = 0
+    start_time = time()
     start_inf = time()
-    for dataset_dir in sorted([d for d in data_root.iterdir() if d.is_dir()]):
-        processed_files, lines_processed = process_dataset_dir(dataset_dir)
-        total_lines_processed += lines_processed
+    next_manifest_threshold = chunk_size
+
+    def on_chunk_done(n: int) -> None:
+        """Update the running total and write a periodic manifest when the threshold is crossed."""
+        nonlocal total_lines_processed, next_manifest_threshold
+        total_lines_processed += n
+        while total_lines_processed >= next_manifest_threshold:
+            write_manifest_atomic(run_dir, summary, total_lines_processed, start_inf, start_time, cli_args=cli_args)
+            print(f"Wrote periodic manifest at {total_lines_processed} total lines (threshold {next_manifest_threshold}).")
+            next_manifest_threshold += chunk_size
+
+    common_kwargs = dict(
+        model=model, tokenizer=tokenizer, device=device,
+        nmax=nmax, chunk_size=chunk_size, cover_only=cover_only,
+        print_tokens=print_tokens, dry_run=dry_run, on_chunk_done=on_chunk_done,
+    )
+
+    # Process .txt files sitting directly in data_root, then each subdirectory.
+    dirs_to_process = [data_root] + sorted([d for d in data_root.iterdir() if d.is_dir()])
+    for dataset_dir in dirs_to_process:
+        processed_files, _ = process_dataset_dir(dataset_dir, run_dir, **common_kwargs)
         summary[dataset_dir.name] = f"{processed_files} files"
 
-    # Save a small manifest for the run (final write) including CLI args
     write_manifest_atomic(run_dir, summary, total_lines_processed, start_inf, start_time, cli_args=cli_args)
     print("Run finished. Summary:", summary)
 
