@@ -5,16 +5,10 @@ Test LoRA fine-tuned Llama model for steganographic text detection
 
 # Third-party modules
 from time import time
-start = time()
 import json
 import torch
 from transformers import LlamaForCausalLM, LlamaTokenizer
-from peft import (
-    LoraConfig,
-    get_peft_model,
-    set_peft_model_state_dict,
-    PeftModel,
-)
+from peft import PeftModel
 import argparse
 from typing import Optional
 from datetime import datetime, timezone
@@ -104,8 +98,9 @@ def load_model_and_tokenizer(use_lora: bool = True):
     base_model_path = "linhvu/decapoda-research-llama-7b-hf"
     print("Using base model:", base_model_path)
 
+    # adapter_path is the folder containing LoRA adapter and tokenizer files
+    adapter_path = "adapter"
     if use_lora:
-        adapter_path = "adapter"
         tokenizer = LlamaTokenizer.from_pretrained(adapter_path)
     else:
         tokenizer = LlamaTokenizer.from_pretrained(base_model_path)
@@ -205,7 +200,10 @@ def run_all_tests(nmax: int = -1, print_tokens: bool = False, use_lora: bool = T
     # Track total lines processed and timing for the whole run
     total_lines_processed = 0
     start_time = time()
-    data_root = root / "data" # TODO: change to parameter if needed
+    if isinstance(cli_args, dict) and 'data_path' in cli_args:
+        data_root = Path(root / "data" / cli_args.get('data_path'))
+    else:
+        data_root = root / "data" / "baseline" # TODO: change to parameter if needed
     logs_root = root / "logs"
 
     # Decide run directory name. Assumption: use underscore form 'run_X' (safe on filesystems).
@@ -232,12 +230,22 @@ def run_all_tests(nmax: int = -1, print_tokens: bool = False, use_lora: bool = T
         print(f"Data root {data_root} does not exist. Nothing to process.")
         return
 
-    start_inf = time()
-    for dataset_dir in sorted([d for d in data_root.iterdir() if d.is_dir()]):
-        rel_dataset = dataset_dir.name
-        out_dataset_dir = run_dir / rel_dataset
+    def process_dataset_dir(dataset_dir: Path) -> tuple[int, int]:
+        """Process all .txt files in a single dataset directory.
+
+        Args:
+            dataset_dir: Path to the dataset subdirectory under data_root.
+
+        Returns:
+            A tuple of (processed_files, lines_processed) counts for this directory.
+        """
+        nonlocal next_manifest_threshold
+
+        out_dataset_dir = run_dir / dataset_dir.name
         out_dataset_dir.mkdir(parents=True, exist_ok=True)
         processed_files = 0
+        lines_processed = 0
+
         # Choose which files to iterate based on cover_only flag
         if cover_only:
             # Only process a file named exactly 'cover.txt' if it exists in the dataset dir
@@ -291,20 +299,27 @@ def run_all_tests(nmax: int = -1, print_tokens: bool = False, use_lora: bool = T
                                 tf.write(json.dumps(ids, ensure_ascii=False) + '\n')
 
                     # Update counters after chunk saved
-                    total_lines_processed += len(chunk)
+                    lines_processed += len(chunk)
                     wrote_any = True
 
                     # Write manifest periodically every `manifest_threshold` outputs.
-                    while total_lines_processed >= next_manifest_threshold:
-                        write_manifest_atomic(run_dir, summary, total_lines_processed, start_inf, start_time, cli_args=cli_args)
-                        print(f"Wrote periodic manifest at {total_lines_processed} total lines (threshold {next_manifest_threshold}).")
+                    while total_lines_processed + lines_processed >= next_manifest_threshold:
+                        write_manifest_atomic(run_dir, summary, total_lines_processed + lines_processed, start_inf, start_time, cli_args=cli_args)
+                        print(f"Wrote periodic manifest at {total_lines_processed + lines_processed} total lines (threshold {next_manifest_threshold}).")
                         next_manifest_threshold += chunk_size
                 processed_files += 1
             except Exception as e:
                 print(f"  Inference failed for {txt_file}: {e}")
                 # don't count this file as processed
                 continue
-        summary[rel_dataset] = f"{processed_files} files"
+
+        return processed_files, lines_processed
+
+    start_inf = time()
+    for dataset_dir in sorted([d for d in data_root.iterdir() if d.is_dir()]):
+        processed_files, lines_processed = process_dataset_dir(dataset_dir)
+        total_lines_processed += lines_processed
+        summary[dataset_dir.name] = f"{processed_files} files"
 
     # Save a small manifest for the run (final write) including CLI args
     write_manifest_atomic(run_dir, summary, total_lines_processed, start_inf, start_time, cli_args=cli_args)
@@ -328,6 +343,9 @@ if __name__ == "__main__":
     # If set, only process files named 'cover.txt' in each dataset folder
     parser.add_argument("--cover-only", dest="cover_only", action="store_true", default=False,
                         help="only run inference on files named 'cover.txt' (default: process all .txt files)")
+    # Optional: override the data path (relative to project root) instead of using default data/baseline
+    parser.add_argument("--data-path", dest="data_path", type=str, default=None,
+                        help="path (relative to project root) to the data directory to process (overrides default 'data/baseline')")
     args = parser.parse_args()
     # Pass all parsed CLI argument values into the run manifest for reproducibility
     run_all_tests(nmax=args.nmax, print_tokens=args.print_tokens, use_lora=not args.no_lora, manifest_threshold=args.manifest_threshold, dry_run=args.dry_run, cli_args=vars(args))
