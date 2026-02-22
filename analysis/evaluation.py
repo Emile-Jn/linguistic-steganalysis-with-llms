@@ -1,5 +1,6 @@
 """
 This script evaluates the results provided by a steganalysis model on a set of sample texts.
+It creates new files in the `predictions/` directory where each line is converted to a boolean value (True for steganographic, False for non-steganographic).
 """
 
 from pathlib import Path
@@ -89,7 +90,7 @@ def convert_folder(folder_path: Path, verbose: bool = False) -> None:
                 convert_txt_file(path, verbose=verbose)
 
 def main() -> None:
-    convert_folder(Path("logs/run_30"), verbose=True)
+    convert_folder(Path("logs/run_36"), verbose=True)
 
 if __name__ == "__main__":
     main()

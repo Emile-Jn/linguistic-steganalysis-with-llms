@@ -4,6 +4,7 @@ Test LoRA fine-tuned Llama model for steganographic text detection
 
 run this on the slurm cluster:
 sbatch --partition=GPU-a100 run.sh test.py -nmax 5
+sbatch --partition=GPU-a100 run.sh test.py -nmax 5 --data-path "qwen-generated"
 """
 
 # Third-party modules
@@ -433,7 +434,7 @@ if __name__ == "__main__":
                         help="only run inference on files named 'cover.txt' (default: process all .txt files)")
     # Optional: override the data path (relative to project root) instead of using default data/baseline
     parser.add_argument("--data-path", dest="data_path", type=str, default=None,
-                        help="path (relative to project root) to the data directory to process (overrides default 'data/baseline')")
+                        help="path (relative to the data dir in the project root) to the data directory to process (overrides default 'data/baseline')")
     args = parser.parse_args()
     # Pass all parsed CLI argument values into the run manifest for reproducibility
     run_all_tests(nmax=args.nmax, print_tokens=args.print_tokens, use_lora=not args.no_lora, manifest_threshold=args.manifest_threshold, dry_run=args.dry_run, cli_args=vars(args))

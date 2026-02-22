@@ -26,7 +26,7 @@ def metrics_report(y_true: list[bool], y_pred: list[bool]) -> str:
     )
     return report
 
-def evaluate_predictions(folder_path: Path):
+def evaluate_predictions(folder_path: Path, negative_group: str = "cover", positive_group: str = "stego") -> str:
     """Evaluate predictions in the given folder and print metrics report.
 
     This function expects two files in `folder_path`: `cover.txt` and `stego.txt`.
@@ -35,8 +35,8 @@ def evaluate_predictions(folder_path: Path):
     """
 
     folder_path = Path(folder_path)
-    cover_file = folder_path / "cover.txt"
-    stego_file = folder_path / "stego.txt"
+    cover_file = folder_path / f"{negative_group}.txt"
+    stego_file = folder_path / f"{positive_group}.txt"
 
     # Ensure required files exist
     if not cover_file.exists():
@@ -97,10 +97,10 @@ def evaluate_predictions(folder_path: Path):
     print(report)
     return report
 
-def main(run_name: str = None, subset: str = "ac"):
+def main(run_name: str = None, subset: str = "ac", negative_group: str = "cover", positive_group: str = "stego"):
     """Main function to evaluate a specific run and save the metrics report."""
     folder = Path(f"predictions/{run_name}/{subset}")
-    report = evaluate_predictions(folder)
+    report = evaluate_predictions(folder, negative_group=negative_group, positive_group=positive_group)
 
     # Ensure the top-level metrics directory exists and write the report there.
     # We keep a per-run subdirectory to avoid filename collisions: metrics/<run_name>/<subset>.txt
@@ -129,4 +129,4 @@ def main2():
 
 
 if __name__ == "__main__":
-    main("run_30", 'hc5')
+    main("run_36", 'qwen-generated', positive_group="gen_cover")
