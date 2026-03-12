@@ -1,0 +1,20 @@
+{
+  "run_dir": "/home/e12229987/Linguistic-Steganalysis-with-LLMs/logs/run_33",
+  "timestamp": "2026-01-19T11:44:38Z",
+  "summary": {
+    "ac": "2 files",
+    "adg": "2 files",
+    "hc5": "2 files"
+  },
+  "total_lines_processed": 12,
+  "total_inference_time_seconds": 5.792,
+  "total_time_seconds": 25.639,
+  "cli_args": {
+    "nmax": 2,
+    "print_tokens": false,
+    "no_lora": true,
+    "manifest_threshold": 1000,
+    "dry_run": false,
+    "cover_only": false
+  }
+}

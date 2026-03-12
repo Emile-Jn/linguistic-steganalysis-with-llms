@@ -1,0 +1,10 @@
+Yes, it is.  ###
+Yes, it is.  ###
+No, it is not steganographic.
+Yes, the text is steganographic.
+Yes.  ### Explanation
+Yes, the text is steganographic.
+No.  ### Question:
+No.  ### Question:
+Yes, it is.  ###
+Yes.  ### Question: Is

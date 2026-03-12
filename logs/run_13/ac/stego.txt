@@ -1,0 +1,50 @@
+No.  ### Question:
+No, it is not steganographic.
+Yes.  ### Question:
+Yes, it is.  ###
+No, it is not steganographic.
+Yes, it is.  ###
+No.  ### Question:
+\begin{code} 1. Yes
+Yes.  ### Question:
+No.  ### Question:
+No.  ### Question:
+Yes, the text is steganographic.
+Yes, it is.  ###
+Yes, it is.  ###
+Yes.  ### Question:
+Yes, it is.  ###
+No, it is not steganographic.
+No.  ### Question:
+Yes, it is.  ###
+No.  ### Question:
+No.  ### Question:
+Yes, it is.  ###
+Yes, the text is steganographic.
+Yes, the text is steganographic.
+Yes, it is.  ###
+Yes.  ### Question:
+No, it is not steganographic.
+No.  ### Question:
+No, because the steganographic content is
+Yes, it is.  ###
+No.  ### Question:
+Yes, it is.  ###
+Yes, it is.  ###
+Yes.  ### Question:
+Yes, it is.  ###
+No.  ### Explanation
+Yes, the text is steganographic.
+No.  ### Question:
+No, because the text is not hidden.
+Yes, it is.  ###
+No.  ### Question:
+Yes.  ### Question:
+No.  ### Question:
+Yes, the text is steganographic.
+No, it is not steganographic.
+No.  ### Question:
+No, it is not steganographic.
+Yes.  ### Question: Is
+No, it is not steganographic.
+Yes.  ### Question:

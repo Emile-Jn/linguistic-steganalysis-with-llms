@@ -1,0 +1,21 @@
+{
+  "run_dir": "/home/e12229987/Linguistic-Steganalysis-with-LLMs/logs/run_18",
+  "lora_weight_path": "checkpoint-22000",
+  "timestamp": "2026-01-18T11:27:46Z",
+  "summary": {
+    "ac": "2 files",
+    "adg": "2 files",
+    "hc5": "2 files"
+  },
+  "total_lines_processed": 30,
+  "total_inference_time_seconds": 4.987,
+  "total_time_seconds": 17.879,
+  "cli_args": {
+    "nmax": 5,
+    "lora_path": "checkpoint-22000",
+    "print_tokens": false,
+    "no_lora": true,
+    "manifest_threshold": 1000,
+    "dry_run": false
+  }
+}
