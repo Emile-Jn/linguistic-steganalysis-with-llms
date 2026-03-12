@@ -1,0 +1,7 @@
+Accuracy: 0.8849
+Precision: 0.9419
+Recall: 0.8203
+F1 Score: 0.8769
+Confusion Matrix:
+  TP: 8203, FP: 506
+  FN: 1797, TN: 9494

@@ -1,3 +1,5 @@
+# Large data files
+# data/ # data is relevant and small enough (under 10Mb per file, few files)
 
 # Jetbrains IDE files
 .idea/
