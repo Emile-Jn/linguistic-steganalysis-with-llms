@@ -8,7 +8,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --time=01:00:00  # request 1 h of max runtime
-
+#SBATCH --output=slurm_output/slurm_%j.out
 
 # always include this, may provide useful information to the admins
 echo "Running on: $SLURM_JOB_NODELIST"
