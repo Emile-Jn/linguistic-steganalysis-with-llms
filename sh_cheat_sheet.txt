@@ -17,6 +17,8 @@ scancel --user=e12229987
 sbatch run.sh test.py
 # Request the a100:
 sbatch --partition=GPU-a100 run.sh test.py -nmax 5
+# Inference on stego dataset:
+sbatch run.sh test.py --data-path qwen-stego
 
 
 # Obsolete options:

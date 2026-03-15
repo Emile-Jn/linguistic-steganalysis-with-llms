@@ -23,9 +23,11 @@ uv sync
 
 ## What you can do with this repo
 
-- Use the trained GS-llama model to get binary classification metrics on a pair of datasets. 
-This is done in `test.py`.
+### Binary classification with GS-llama
+Use the trained GS-llama model to get binary classification metrics on a pair of datasets. 
+This is done in `test.py`.  
 By default `data/ac/stego.txt` and `data/ac/cover.txt` are used, but you can change the path to any pair of datasets.
+
 
 # Original repo description
 

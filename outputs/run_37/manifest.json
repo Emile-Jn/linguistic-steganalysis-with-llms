@@ -1,0 +1,19 @@
+{
+  "run_dir": "/home/e12229987/Linguistic-Steganalysis-with-LLMs/logs/run_37",
+  "timestamp": "2026-03-15T11:14:57Z",
+  "summary": {
+    "qwen-stego": "1 files"
+  },
+  "total_lines_processed": 910,
+  "total_inference_time_seconds": 46.235,
+  "total_time_seconds": 46.235,
+  "cli_args": {
+    "nmax": -1,
+    "print_tokens": false,
+    "no_lora": false,
+    "manifest_threshold": 1000,
+    "dry_run": false,
+    "cover_only": false,
+    "data_path": "qwen-stego"
+  }
+}

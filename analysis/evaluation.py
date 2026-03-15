@@ -3,9 +3,10 @@ This script evaluates the results provided by a steganalysis model on a set of s
 It creates new files in the `predictions/` directory where each line is converted to a boolean value (True for steganographic, False for non-steganographic).
 """
 
+import argparse
 from pathlib import Path
 
-def coerce_txt_to_bool(label: str) -> bool:
+def coerce_txt_to_bool(label: str) -> bool | None:
     """Convert label string to boolean value."""
     label = label.lower()
     if label.startswith("yes") or label.startswith("steganographic"):
@@ -19,10 +20,10 @@ def convert_txt_file(file_path: Path, verbose: bool = False) :
     """Make a new version of a txt file where each line is converted to a boolean value.
 
     The output will be written under the `predictions/` directory while preserving
-    the folder structure that appears under `logs/` in the original path. For
-    example: `logs/run_5/ac/stego.txt` -> `predictions/run_5/ac/stego.txt`.
+    the folder structure that appears under `outputs/` in the original path. For
+    example: `outputs/run_5/ac/stego.txt` -> `predictions/run_5/ac/stego.txt`.
 
-    If the input file is not under a `logs/` directory, the function will try to
+    If the input file is not under a `outputs/` directory, the function will try to
     preserve the file's repository-relative path. If that isn't possible it will
     fall back to writing `predictions/<filename>`.
 
@@ -50,10 +51,10 @@ def convert_txt_file(file_path: Path, verbose: bool = False) :
     repo_root = Path.cwd()
     target = None
     parts = file_path.parts
-    if "logs" in parts:
-        # preserve structure under logs/
-        idx = parts.index("logs")
-        rel = Path(*parts[idx+1:])  # everything after 'logs'
+    if "outputs" in parts:
+        # preserve structure under outputs/
+        idx = parts.index("outputs")
+        rel = Path(*parts[idx+1:])  # everything after 'outputs'
         target = Path("predictions") / rel
     else:
         # try to preserve repo-relative path
@@ -90,7 +91,20 @@ def convert_folder(folder_path: Path, verbose: bool = False) -> None:
                 convert_txt_file(path, verbose=verbose)
 
 def main() -> None:
-    convert_folder(Path("logs/run_36"), verbose=True)
+    parser = argparse.ArgumentParser(
+        description="Convert model output txt labels in a folder into boolean prediction files."
+    )
+    parser.add_argument(
+        "folder",
+        type=Path,
+        help="Path to the folder whose .txt files should be converted.",
+    )
+    args = parser.parse_args()
+
+    if not args.folder.exists() or not args.folder.is_dir():
+        parser.error(f"Folder does not exist or is not a directory: {args.folder}")
+
+    convert_folder(args.folder, verbose=True)
 
 if __name__ == "__main__":
     main()
