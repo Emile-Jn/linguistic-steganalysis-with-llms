@@ -6,15 +6,16 @@ from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_sc
 from pathlib import Path
 from typing import List
 import argparse
+import ast
 
 def metrics_report(y_true: list[bool], y_pred: list[bool]) -> str:
     """Generate a metrics report given true and predicted labels."""
 
     accuracy = accuracy_score(y_true, y_pred)
-    precision = precision_score(y_true, y_pred)
-    recall = recall_score(y_true, y_pred)
-    f1 = f1_score(y_true, y_pred)
-    tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
+    precision = precision_score(y_true, y_pred, zero_division=0)
+    recall = recall_score(y_true, y_pred, zero_division=0)
+    f1 = f1_score(y_true, y_pred, zero_division=0)
+    tn, fp, fn, tp = confusion_matrix(y_true, y_pred, labels=[False, True]).ravel()
 
     report = (
         f"Accuracy: {accuracy:.4f}\n"
@@ -27,11 +28,46 @@ def metrics_report(y_true: list[bool], y_pred: list[bool]) -> str:
     )
     return report
 
+def parse_bool(line: str) -> bool:
+    """Convert a single line to a boolean.
+
+    Rules:
+    - Empty string or "None" (case-insensitive) -> False
+    - Python literals `True`/`False` and integers `1`/`0` are supported
+    - Common textual representations (yes/no, y/n, t/f) are supported
+    - Any unparsable value raises ValueError to avoid silent mistakes
+    """
+    if line is None:
+        return False
+    s = line.strip()
+    if s == "" or s.lower() == "none":
+        return False
+
+    # Try Python literal first (True/False/1/0)
+    try:
+        val = ast.literal_eval(s)
+        if isinstance(val, bool):
+            return val
+        if isinstance(val, int):
+            return bool(val)
+    except Exception:
+        # fall through to textual checks
+        pass
+
+    low = s.lower()
+    if low in ("true", "t", "1", "yes", "y"):
+        return True
+    if low in ("false", "f", "0", "no", "n"):
+        return False
+
+    raise ValueError(f"Cannot parse boolean value from line: {line!r}")
+
 def evaluate_predictions(folder_path: Path, negative_group: str = "cover", positive_group: str = "stego") -> str:
     """Evaluate predictions in the given folder and print metrics report.
 
-    This function expects two files in `folder_path`: `cover.txt` and `stego.txt`.
-    Each line in those files will be converted to a bool (with empty/`None` -> False).
+    This function reads predictions from `<negative_group>.txt` and/or
+    `<positive_group>.txt` in `folder_path`. At least one file must exist.
+    Each line is converted to a bool (with empty/`None` -> False).
     It returns the generated metrics report string.
     """
 
@@ -39,60 +75,28 @@ def evaluate_predictions(folder_path: Path, negative_group: str = "cover", posit
     cover_file = folder_path / f"{negative_group}.txt"
     stego_file = folder_path / f"{positive_group}.txt"
 
-    # Ensure required files exist
-    if not cover_file.exists():
-        raise FileNotFoundError(f"Missing required file: {cover_file}")
-    if not stego_file.exists():
-        raise FileNotFoundError(f"Missing required file: {stego_file}")
+    if not cover_file.exists() and not stego_file.exists():
+        raise FileNotFoundError(
+            f"Missing required files: expected at least one of {cover_file} or {stego_file}"
+        )
 
-    def parse_bool(line: str) -> bool:
-        """Convert a single line to a boolean.
+    cover_vals: List[bool] = []
+    stego_vals: List[bool] = []
 
-        Rules:
-        - Empty string or "None" (case-insensitive) -> False
-        - Python literals `True`/`False` and integers `1`/`0` are supported
-        - Common textual representations (yes/no, y/n, t/f) are supported
-        - Any unparsable value raises ValueError to avoid silent mistakes
-        """
-        if line is None:
-            return False
-        s = line.strip()
-        if s == "" or s.lower() == "none":
-            return False
+    if cover_file.exists():
+        with cover_file.open("r", encoding="utf-8") as f:
+            cover_vals = [parse_bool(line) for line in f]
 
-        # Try Python literal first (True/False/1/0)
-        import ast
-        try:
-            val = ast.literal_eval(s)
-            if isinstance(val, bool):
-                return val
-            if isinstance(val, int):
-                return bool(val)
-        except Exception:
-            # fall through to textual checks
-            pass
-
-        low = s.lower()
-        if low in ("true", "t", "1", "yes", "y"):
-            return True
-        if low in ("false", "f", "0", "no", "n"):
-            return False
-
-        raise ValueError(f"Cannot parse boolean value from line: {line!r}")
-
-    # Read and parse files
-    with cover_file.open("r", encoding="utf-8") as f:
-        cover_vals: List[bool] = [parse_bool(line) for line in f]
-
-    with stego_file.open("r", encoding="utf-8") as f:
-        stego_vals: List[bool] = [parse_bool(line) for line in f]
+    if stego_file.exists():
+        with stego_file.open("r", encoding="utf-8") as f:
+            stego_vals = [parse_bool(line) for line in f]
 
     # Build y_pred and y_true with the requested ordering
     y_pred = cover_vals + stego_vals
     y_true = [False] * len(cover_vals) + [True] * len(stego_vals)
 
-    if len(y_pred) != len(y_true):
-        raise ValueError("Predicted and true label lists are not the same length")
+    if not y_true:
+        raise ValueError("No predictions found: input file(s) are empty")
 
     report = metrics_report(y_true, y_pred)
     print(report)
