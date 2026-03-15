@@ -5,6 +5,7 @@ This script calculates various evaluation metrics for steganalysis models based 
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
 from pathlib import Path
 from typing import List
+import argparse
 
 def metrics_report(y_true: list[bool], y_pred: list[bool]) -> str:
     """Generate a metrics report given true and predicted labels."""
@@ -97,7 +98,7 @@ def evaluate_predictions(folder_path: Path, negative_group: str = "cover", posit
     print(report)
     return report
 
-def main(run_name: str = None, subset: str = "ac", negative_group: str = "cover", positive_group: str = "stego"):
+def main(run_name: str, subset: str = "ac", negative_group: str = "cover", positive_group: str = "stego"):
     """Main function to evaluate a specific run and save the metrics report."""
     folder = Path(f"predictions/{run_name}/{subset}")
     report = evaluate_predictions(folder, negative_group=negative_group, positive_group=positive_group)
@@ -110,23 +111,21 @@ def main(run_name: str = None, subset: str = "ac", negative_group: str = "cover"
     out_file.write_text(report, encoding="utf-8")
 
 
-def main2():
-    """Simple CLI entrypoint. Usage: python -m analysis.metrics <folder_path>"""
-    import argparse
-
-    parser = argparse.ArgumentParser(
-        description="Evaluate predictions in a folder containing cover.txt and stego.txt"
-    )
-    parser.add_argument(
-        "folder",
-        type=Path,
-        nargs="?",
-        default=Path.cwd(),
-        help="Folder containing cover.txt and stego.txt",
-    )
-    args = parser.parse_args()
-    evaluate_predictions(args.folder)
+def parse_args() -> argparse.Namespace:
+    """Parse CLI arguments for selecting run/subset and label file names."""
+    parser = argparse.ArgumentParser(description="Evaluate steganalysis predictions and write a metrics report.")
+    parser.add_argument("run_name", help="Run folder name under predictions/ (for example: run_37)")
+    parser.add_argument("--subset", default="ac", help="Subset folder under the run (default: ac)")
+    parser.add_argument("--negative-group", default="cover", help="Negative label filename stem (default: cover)")
+    parser.add_argument("--positive-group", default="stego", help="Positive label filename stem (default: stego)")
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
-    main("run_37", 'qwen-generated', positive_group="gen_cover")
+    args = parse_args()
+    main(
+        run_name=args.run_name,
+        subset=args.subset,
+        negative_group=args.negative_group,
+        positive_group=args.positive_group,
+    )
