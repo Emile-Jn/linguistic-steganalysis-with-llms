@@ -13,13 +13,20 @@ sacct
 scancel --user=e12229987
 
 
-# Run my code:
+# Run classification:
 sbatch run.sh test.py
 # Request the a100:
 sbatch --partition=GPU-a100 run.sh test.py -nmax 5
 # Inference on stego dataset:
 sbatch run.sh test.py --data-path qwen-stego
+# Inference on gen cover inspired by stanford IMDB dataset:
+sbatch run.sh test.py --data-path qwen3_stanford_imdb
 
+# Evaluation:
+python3 -m analysis.evaluation run_38
+
+# Metrics:
+python3 -m analysis.metrics run_38 --subset qwen3_stanford_imdb --positive-group gen-cover
 
 # Obsolete options:
 

@@ -171,13 +171,13 @@ def run_inference(texts, model, tokenizer, device, batch_size=BATCH_SIZE):
 
 
 def _resolve_paths(cli_args: Optional[dict]) -> tuple[Path, Path]:
-    """Return (data_root, logs_root) derived from the project root and optional CLI args.
+    """Return (data_root, outputs_root) derived from the project root and optional CLI args.
 
     Args:
         cli_args: parsed CLI arguments dict; may contain 'data_path' to override the default.
 
     Returns:
-        A tuple of (data_root, logs_root) as absolute Path objects.
+        A tuple of (data_root, outputs_root) as absolute Path objects.
     """
     try:
         root = Path(get_root_dir())
@@ -189,8 +189,8 @@ def _resolve_paths(cli_args: Optional[dict]) -> tuple[Path, Path]:
     else:
         data_root = root / "data" / "baseline"
 
-    logs_root = root / "logs"
-    return data_root, logs_root
+    outputs_root = root / "outputs"
+    return data_root, outputs_root
 
 
 def _load_model(use_lora: bool, dry_run: bool):
@@ -222,7 +222,7 @@ def _process_txt_file(
     tokenizer,
     device,
     *,
-    nmax: int,
+    nmax: Optional[int],
     chunk_size: int,
     print_tokens: bool,
     dry_run: bool,
@@ -234,7 +234,7 @@ def _process_txt_file(
         txt_file: input text file to process.
         out_dir: directory where the output file (and optional tokens JSONL) will be written.
         model, tokenizer, device: loaded model components (may be None in dry-run mode).
-        nmax: maximum number of input lines to process; -1 means no limit.
+        nmax: maximum number of input lines to process; None means no limit.
         chunk_size: number of lines to process per batch before flushing to disk.
         print_tokens: if True, write a parallel .tokens.jsonl file with generated token IDs.
         dry_run: if True, produce fake outputs without calling the model.
@@ -247,7 +247,7 @@ def _process_txt_file(
     print(f"Processing {txt_file}...")
     texts = read_txt_lines(str(txt_file))
 
-    if nmax is not None and nmax != -1 and len(texts) > nmax:
+    if nmax is not None and len(texts) > nmax:
         texts = texts[:nmax]
         print(f"  Truncated to first {nmax} lines for {txt_file}")
 
@@ -301,7 +301,7 @@ def process_dataset_dir(
     tokenizer,
     device,
     *,
-    nmax: int,
+    nmax: Optional[int],
     chunk_size: int,
     cover_only: bool,
     print_tokens: bool,
@@ -314,7 +314,7 @@ def process_dataset_dir(
         dataset_dir: input directory containing .txt files to process.
         out_root: root output directory; results are written to out_root/dataset_dir.name/.
         model, tokenizer, device: loaded model components (may be None in dry-run mode).
-        nmax: maximum number of input lines per file; -1 means no limit.
+        nmax: maximum number of input lines per file; None means no limit.
         chunk_size: lines per inference batch.
         cover_only: if True, only process a file named exactly 'cover.txt'.
         print_tokens: if True, write a parallel .tokens.jsonl for each output file.
@@ -348,7 +348,7 @@ def process_dataset_dir(
     return processed_files, lines_processed
 
 
-def run_all_tests(nmax: int = -1, print_tokens: bool = False, use_lora: bool = True, manifest_threshold: int = 1000, dry_run: bool = False, cli_args: Optional[dict] = None):
+def run_all_tests(nmax: Optional[int] = None, print_tokens: bool = False, use_lora: bool = True, manifest_threshold: int = 1000, dry_run: bool = False, cli_args: Optional[dict] = None):
     """Top-level pipeline:
     - Resolves data and logs paths
     - Creates a new run_X folder inside logs/
@@ -356,7 +356,7 @@ def run_all_tests(nmax: int = -1, print_tokens: bool = False, use_lora: bool = T
       writing outputs that mirror the input directory structure
 
     Args:
-        nmax: maximum number of lines to take from each .txt file. -1 means all lines.
+        nmax: maximum number of lines to take from each .txt file. None means all lines.
         print_tokens: whether to write generated token IDs to a sidecar .tokens.jsonl file.
         use_lora: whether to load LoRA adapter weights into the model.
         manifest_threshold: write a periodic manifest every this many output lines.
@@ -366,12 +366,12 @@ def run_all_tests(nmax: int = -1, print_tokens: bool = False, use_lora: bool = T
     cover_only = bool(cli_args.get('cover_only')) if isinstance(cli_args, dict) else False
     chunk_size = int(manifest_threshold) if manifest_threshold and manifest_threshold > 0 else 1000
 
-    data_root, logs_root = _resolve_paths(cli_args)
+    data_root, outputs_root = _resolve_paths(cli_args)
     if not data_root.exists():
         print(f"Data root {data_root} does not exist. Nothing to process.")
         return
 
-    run_dir = get_next_run_dir(logs_root)
+    run_dir = get_next_run_dir(outputs_root)
     run_dir.mkdir(parents=True, exist_ok=True)
     print(f"Creating new run directory: {run_dir}")
 
@@ -417,7 +417,7 @@ def run_all_tests(nmax: int = -1, print_tokens: bool = False, use_lora: bool = T
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run steganographic detection tests over text datasets")
-    parser.add_argument("-nmax", type=int, default=-1, help="maximum number of lines to read from each .txt file (-1 for all)")
+    parser.add_argument("-nmax", type=int, default=None, help="maximum number of lines to read from each .txt file (default: all lines)")
     # If set, write a .tokens.jsonl file next to each generated .txt with token id arrays per line
     parser.add_argument("--print-tokens", action="store_true", dest="print_tokens",
                         help="write per-output token id JSONL files next to the .txt outputs")

@@ -28,6 +28,14 @@ Use the trained GS-llama model to get binary classification metrics on a pair of
 This is done in `test.py`.  
 By default `data/ac/stego.txt` and `data/ac/cover.txt` are used, but you can change the path to any pair of datasets.
 
+### Evaluate outputs
+By running `evaluate.py`, you can evaluate the outputs of the model by converting strings 
+like `steganographic]{']{']{']{'` or `no]{']{']{']{']{']{']{'` into `True` or `False`. 
+The results are saved under `predictions/`.
+
+### Calculate metrics
+By running `metrics.py`, you can calculate the binary classification metrics (accuracy, precision, recall, F1 score) 
+based on the outputs of `evaluate.py`. The results are saved under `metrics/`.
 
 # Original repo description
 

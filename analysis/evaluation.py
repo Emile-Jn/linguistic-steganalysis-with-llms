@@ -92,19 +92,27 @@ def convert_folder(folder_path: Path, verbose: bool = False) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Convert model output txt labels in a folder into boolean prediction files."
+        description="Convert model output txt labels in an outputs/ subfolder into boolean prediction files."
     )
     parser.add_argument(
         "folder",
         type=Path,
-        help="Path to the folder whose .txt files should be converted.",
+        help="Subfolder under outputs/ whose .txt files should be converted (e.g. run_37/ac).",
     )
     args = parser.parse_args()
 
-    if not args.folder.exists() or not args.folder.is_dir():
-        parser.error(f"Folder does not exist or is not a directory: {args.folder}")
+    # Treat CLI input as relative to outputs/.
+    requested = args.folder
+    if requested.parts and requested.parts[0] == "outputs":
+        requested = Path(*requested.parts[1:])
+    folder_path = Path("outputs") / requested
 
-    convert_folder(args.folder, verbose=True)
+    if not folder_path.exists() or not folder_path.is_dir():
+        parser.error(
+            f"Folder does not exist or is not a directory under outputs/: {folder_path}"
+        )
+
+    convert_folder(folder_path, verbose=True)
 
 if __name__ == "__main__":
     main()

@@ -102,16 +102,49 @@ def evaluate_predictions(folder_path: Path, negative_group: str = "cover", posit
     print(report)
     return report
 
-def main(run_name: str, subset: str = "ac", negative_group: str = "cover", positive_group: str = "stego"):
+def resolve_subset(run_name: str, subset: str | None) -> str:
+    """Resolve the subset directory for a run.
+
+    - If the run has exactly one subfolder, always use it.
+    - If the run has multiple subfolders, `subset` must be provided and valid.
+    """
+    run_dir = Path("predictions") / run_name
+    if not run_dir.exists() or not run_dir.is_dir():
+        raise FileNotFoundError(f"Run directory does not exist: {run_dir}")
+
+    subfolders = sorted(p.name for p in run_dir.iterdir() if p.is_dir())
+
+    if len(subfolders) == 1:
+        return subfolders[0]
+
+    if len(subfolders) == 0:
+        raise ValueError(f"No subset folders found under {run_dir}")
+
+    if subset is None:
+        raise ValueError(
+            f"Run '{run_name}' has multiple subsets {subfolders}. "
+            "Please pass --subset <name>."
+        )
+
+    if subset not in subfolders:
+        raise ValueError(
+            f"Subset '{subset}' not found for run '{run_name}'. Available: {subfolders}"
+        )
+
+    return subset
+
+
+def main(run_name: str, subset: str | None = None, negative_group: str = "cover", positive_group: str = "stego"):
     """Main function to evaluate a specific run and save the metrics report."""
-    folder = Path(f"predictions/{run_name}/{subset}")
+    resolved_subset = resolve_subset(run_name, subset)
+    folder = Path(f"predictions/{run_name}/{resolved_subset}")
     report = evaluate_predictions(folder, negative_group=negative_group, positive_group=positive_group)
 
     # Ensure the top-level metrics directory exists and write the report there.
     # We keep a per-run subdirectory to avoid filename collisions: metrics/<run_name>/<subset>.txt
     out_dir = Path("metrics") / f"{run_name}"
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_file = out_dir / f"{subset}.txt"
+    out_file = out_dir / f"{resolved_subset}.txt"
     out_file.write_text(report, encoding="utf-8")
 
 
@@ -119,7 +152,11 @@ def parse_args() -> argparse.Namespace:
     """Parse CLI arguments for selecting run/subset and label file names."""
     parser = argparse.ArgumentParser(description="Evaluate steganalysis predictions and write a metrics report.")
     parser.add_argument("run_name", help="Run folder name under predictions/ (for example: run_37)")
-    parser.add_argument("--subset", default="ac", help="Subset folder under the run (default: ac)")
+    parser.add_argument(
+        "--subset",
+        default=None,
+        help="Subset folder under the run. Required only when a run has multiple subset folders.",
+    )
     parser.add_argument("--negative-group", default="cover", help="Negative label filename stem (default: cover)")
     parser.add_argument("--positive-group", default="stego", help="Positive label filename stem (default: stego)")
     return parser.parse_args()

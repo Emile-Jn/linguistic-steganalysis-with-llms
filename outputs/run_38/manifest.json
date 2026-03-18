@@ -1,0 +1,19 @@
+{
+  "run_dir": "/home/e12229987/Linguistic-Steganalysis-with-LLMs/logs/run_1",
+  "timestamp": "2026-03-18T07:52:21Z",
+  "summary": {
+    "qwen3_stanford_imdb": "2 files"
+  },
+  "total_lines_processed": 11000,
+  "total_inference_time_seconds": 608.113,
+  "total_time_seconds": 608.113,
+  "cli_args": {
+    "nmax": null,
+    "print_tokens": false,
+    "no_lora": false,
+    "manifest_threshold": 1000,
+    "dry_run": false,
+    "cover_only": false,
+    "data_path": "qwen3_stanford_imdb"
+  }
+}
