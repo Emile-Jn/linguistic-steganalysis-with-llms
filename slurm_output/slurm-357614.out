@@ -1,0 +1,5 @@
+Running on: a-a100-o-2
+Starting script test.py
+usage: test.py [-h] [-nmax NMAX] [--lora-path LORA_PATH] [--print-tokens]
+test.py: error: unrecognized arguments: --Truee
+Finished.

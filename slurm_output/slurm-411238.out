@@ -1,0 +1,25 @@
+Running on: a-a100-os-4
+Starting script test.py
+You are using the default legacy behaviour of the <class 'transformers.models.llama.tokenization_llama.LlamaTokenizer'>. This is expected, and simply means that the `legacy` (previous) behavior will be used so nothing changes for you. If you want to use the new behaviour, set `legacy=False`. This should only be set if you understand what it means, and thoroughly read the reason why this was added as explained in https://github.com/huggingface/transformers/pull/24565 - if you loaded a llama tokenizer from a GGUF file you can ignore this message
+The `load_in_4bit` and `load_in_8bit` arguments are deprecated and will be removed in the future versions. Please, pass a `BitsAndBytesConfig` object in `quantization_config` argument instead.
+The following generation flags are not valid and may be ignored: ['pad_token_id']. Set `TRANSFORMERS_VERBOSITY=info` for more details.
+Creating new run directory: /home/e12229987/Linguistic-Steganalysis-with-LLMs/logs/run_1
+Using base model: linhvu/decapoda-research-llama-7b-hf
+Loading checkpoint shards:   0%|          | 0/33 [00:00<?, ?it/s]Loading checkpoint shards:   3%|▎         | 1/33 [00:00<00:24,  1.29it/s]Loading checkpoint shards:   6%|▌         | 2/33 [00:01<00:23,  1.31it/s]Loading checkpoint shards:   9%|▉         | 3/33 [00:02<00:20,  1.47it/s]Loading checkpoint shards:  12%|█▏        | 4/33 [00:02<00:18,  1.57it/s]Loading checkpoint shards:  15%|█▌        | 5/33 [00:03<00:17,  1.61it/s]Loading checkpoint shards:  18%|█▊        | 6/33 [00:03<00:16,  1.67it/s]Loading checkpoint shards:  21%|██        | 7/33 [00:04<00:15,  1.70it/s]Loading checkpoint shards:  24%|██▍       | 8/33 [00:05<00:16,  1.55it/s]Loading checkpoint shards:  27%|██▋       | 9/33 [00:05<00:16,  1.48it/s]Loading checkpoint shards:  30%|███       | 10/33 [00:06<00:14,  1.56it/s]Loading checkpoint shards:  33%|███▎      | 11/33 [00:07<00:13,  1.62it/s]Loading checkpoint shards:  36%|███▋      | 12/33 [00:07<00:12,  1.67it/s]Loading checkpoint shards:  39%|███▉      | 13/33 [00:08<00:11,  1.70it/s]Loading checkpoint shards:  42%|████▏     | 14/33 [00:08<00:11,  1.72it/s]Loading checkpoint shards:  45%|████▌     | 15/33 [00:09<00:10,  1.74it/s]Loading checkpoint shards:  48%|████▊     | 16/33 [00:09<00:09,  1.75it/s]Loading checkpoint shards:  52%|█████▏    | 17/33 [00:10<00:09,  1.76it/s]Loading checkpoint shards:  55%|█████▍    | 18/33 [00:10<00:08,  1.77it/s]Loading checkpoint shards:  58%|█████▊    | 19/33 [00:11<00:07,  1.78it/s]Loading checkpoint shards:  61%|██████    | 20/33 [00:12<00:07,  1.78it/s]Loading checkpoint shards:  64%|██████▎   | 21/33 [00:12<00:06,  1.80it/s]Loading checkpoint shards:  67%|██████▋   | 22/33 [00:13<00:06,  1.79it/s]Loading checkpoint shards:  70%|██████▉   | 23/33 [00:13<00:05,  1.80it/s]Loading checkpoint shards:  73%|███████▎  | 24/33 [00:14<00:04,  1.80it/s]Loading checkpoint shards:  76%|███████▌  | 25/33 [00:14<00:04,  1.81it/s]Loading checkpoint shards:  79%|███████▉  | 26/33 [00:15<00:03,  1.80it/s]Loading checkpoint shards:  82%|████████▏ | 27/33 [00:15<00:03,  1.81it/s]Loading checkpoint shards:  85%|████████▍ | 28/33 [00:16<00:02,  1.81it/s]Loading checkpoint shards:  88%|████████▊ | 29/33 [00:17<00:02,  1.80it/s]Loading checkpoint shards:  91%|█████████ | 30/33 [00:17<00:01,  1.79it/s]Loading checkpoint shards:  94%|█████████▍| 31/33 [00:18<00:01,  1.76it/s]Loading checkpoint shards:  97%|█████████▋| 32/33 [00:18<00:00,  1.78it/s]Loading checkpoint shards: 100%|██████████| 33/33 [00:19<00:00,  1.84it/s]Loading checkpoint shards: 100%|██████████| 33/33 [00:19<00:00,  1.71it/s]
+/home/e12229987/Linguistic-Steganalysis-with-LLMs/.venv/lib/python3.13/site-packages/peft/config.py:220: UserWarning: Unexpected keyword arguments ['enable_lora', 'merge_weights'] for class LoraConfig, these are ignored. This probably means that you're loading a configuration file that was saved using a higher version of the library and additional parameters have been introduced since. It is highly recommended to upgrade the PEFT version before continuing (e.g. by running `pip install -U peft`).
+  warnings.warn(
+Processing /home/e12229987/Linguistic-Steganalysis-with-LLMs/data/qwen3_stanford_imdb/cover.txt...
+Wrote periodic manifest at 1000 total lines (threshold 1000).
+Wrote periodic manifest at 2000 total lines (threshold 2000).
+Wrote periodic manifest at 3000 total lines (threshold 3000).
+Wrote periodic manifest at 4000 total lines (threshold 4000).
+Wrote periodic manifest at 5000 total lines (threshold 5000).
+Wrote periodic manifest at 6000 total lines (threshold 6000).
+Wrote periodic manifest at 7000 total lines (threshold 7000).
+Wrote periodic manifest at 8000 total lines (threshold 8000).
+Wrote periodic manifest at 9000 total lines (threshold 9000).
+Wrote periodic manifest at 10000 total lines (threshold 10000).
+Processing /home/e12229987/Linguistic-Steganalysis-with-LLMs/data/qwen3_stanford_imdb/gen_cover.txt...
+Wrote periodic manifest at 11000 total lines (threshold 11000).
+Run finished. Summary: {'qwen3_stanford_imdb': '2 files'}
+Finished.

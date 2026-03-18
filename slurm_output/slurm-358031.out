@@ -1,0 +1,8 @@
+Running on: a-a100-q-6
+Starting script test.py
+Traceback (most recent call last):
+  File "/home/e12229987/Linguistic-Steganalysis-with-LLMs/test.py", line 253, in <module>
+    run_all_tests(nmax=args.nmax, lora_weight_path=args.lora_path, print_tokens=args.print_tokens, use_lora=not args.no_lora)
+                                                                                                                ^^^^^^^^^^^^
+AttributeError: 'Namespace' object has no attribute 'no_lora'. Did you mean: 'use_lora'?
+Finished.

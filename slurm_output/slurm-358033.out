@@ -1,0 +1,37 @@
+Running on: a-a100-q-6
+Starting script test.py
+The following generation flags are not valid and may be ignored: ['pad_token_id']. Set `TRANSFORMERS_VERBOSITY=info` for more details.
+Creating new run directory: /home/e12229987/Linguistic-Steganalysis-with-LLMs/logs/run_10
+Using device: cuda
+Using model: linhvu/decapoda-research-llama-7b-hf
+Loading checkpoint shards:   0%|          | 0/33 [00:00<?, ?it/s]Loading checkpoint shards:   3%|▎         | 1/33 [00:00<00:16,  1.88it/s]Loading checkpoint shards:   6%|▌         | 2/33 [00:00<00:14,  2.13it/s]Loading checkpoint shards:   9%|▉         | 3/33 [00:01<00:13,  2.20it/s]Loading checkpoint shards:  12%|█▏        | 4/33 [00:01<00:13,  2.23it/s]Loading checkpoint shards:  15%|█▌        | 5/33 [00:02<00:12,  2.22it/s]Loading checkpoint shards:  18%|█▊        | 6/33 [00:02<00:12,  2.23it/s]Loading checkpoint shards:  21%|██        | 7/33 [00:03<00:11,  2.25it/s]Loading checkpoint shards:  24%|██▍       | 8/33 [00:03<00:11,  2.27it/s]Loading checkpoint shards:  27%|██▋       | 9/33 [00:04<00:10,  2.31it/s]Loading checkpoint shards:  30%|███       | 10/33 [00:04<00:09,  2.32it/s]Loading checkpoint shards:  33%|███▎      | 11/33 [00:04<00:09,  2.35it/s]Loading checkpoint shards:  36%|███▋      | 12/33 [00:05<00:08,  2.35it/s]Loading checkpoint shards:  39%|███▉      | 13/33 [00:05<00:08,  2.36it/s]Loading checkpoint shards:  42%|████▏     | 14/33 [00:06<00:08,  2.37it/s]Loading checkpoint shards:  45%|████▌     | 15/33 [00:06<00:07,  2.34it/s]Loading checkpoint shards:  48%|████▊     | 16/33 [00:06<00:07,  2.36it/s]Loading checkpoint shards:  52%|█████▏    | 17/33 [00:07<00:06,  2.37it/s]Loading checkpoint shards:  55%|█████▍    | 18/33 [00:07<00:06,  2.36it/s]Loading checkpoint shards:  58%|█████▊    | 19/33 [00:08<00:05,  2.38it/s]Loading checkpoint shards:  61%|██████    | 20/33 [00:08<00:05,  2.37it/s]Loading checkpoint shards:  64%|██████▎   | 21/33 [00:09<00:04,  2.40it/s]Loading checkpoint shards:  67%|██████▋   | 22/33 [00:09<00:04,  2.39it/s]Loading checkpoint shards:  70%|██████▉   | 23/33 [00:09<00:04,  2.40it/s]Loading checkpoint shards:  73%|███████▎  | 24/33 [00:10<00:03,  2.38it/s]Loading checkpoint shards:  76%|███████▌  | 25/33 [00:10<00:03,  2.37it/s]Loading checkpoint shards:  79%|███████▉  | 26/33 [00:11<00:02,  2.33it/s]Loading checkpoint shards:  82%|████████▏ | 27/33 [00:11<00:02,  2.29it/s]Loading checkpoint shards:  85%|████████▍ | 28/33 [00:12<00:02,  2.33it/s]Loading checkpoint shards:  88%|████████▊ | 29/33 [00:12<00:01,  2.31it/s]Loading checkpoint shards:  91%|█████████ | 30/33 [00:12<00:01,  2.37it/s]Loading checkpoint shards:  94%|█████████▍| 31/33 [00:13<00:00,  2.36it/s]Loading checkpoint shards:  97%|█████████▋| 32/33 [00:13<00:00,  2.38it/s]Loading checkpoint shards: 100%|██████████| 33/33 [00:14<00:00,  2.35it/s]Loading checkpoint shards: 100%|██████████| 33/33 [00:14<00:00,  2.33it/s]
+You are using the default legacy behaviour of the <class 'transformers.models.llama.tokenization_llama.LlamaTokenizer'>. This is expected, and simply means that the `legacy` (previous) behavior will be used so nothing changes for you. If you want to use the new behaviour, set `legacy=False`. This should only be set if you understand what it means, and thoroughly read the reason why this was added as explained in https://github.com/huggingface/transformers/pull/24565 - if you loaded a llama tokenizer from a GGUF file you can ignore this message
+
+- - - - - Debug info - - - - -
+
+{}
+0
+1
+
+- - - - - - - - - - -  - - - -
+
+Processing /home/e12229987/Linguistic-Steganalysis-with-LLMs/data/ac/cover.txt...
+  Truncated to first 5 lines for /home/e12229987/Linguistic-Steganalysis-with-LLMs/data/ac/cover.txt
+  0%|          | 0/5 [00:00<?, ?it/s] 20%|██        | 1/5 [00:00<00:03,  1.25it/s] 40%|████      | 2/5 [00:01<00:01,  2.03it/s] 60%|██████    | 3/5 [00:01<00:00,  2.53it/s] 80%|████████  | 4/5 [00:01<00:00,  2.81it/s]100%|██████████| 5/5 [00:01<00:00,  3.05it/s]100%|██████████| 5/5 [00:01<00:00,  2.59it/s]
+Processing /home/e12229987/Linguistic-Steganalysis-with-LLMs/data/ac/stego.txt...
+  Truncated to first 5 lines for /home/e12229987/Linguistic-Steganalysis-with-LLMs/data/ac/stego.txt
+  0%|          | 0/5 [00:00<?, ?it/s] 20%|██        | 1/5 [00:00<00:01,  3.59it/s] 40%|████      | 2/5 [00:00<00:00,  3.59it/s] 60%|██████    | 3/5 [00:00<00:00,  3.48it/s] 80%|████████  | 4/5 [00:01<00:00,  3.43it/s]100%|██████████| 5/5 [00:01<00:00,  3.49it/s]100%|██████████| 5/5 [00:01<00:00,  3.50it/s]
+Processing /home/e12229987/Linguistic-Steganalysis-with-LLMs/data/adg/cover.txt...
+  Truncated to first 5 lines for /home/e12229987/Linguistic-Steganalysis-with-LLMs/data/adg/cover.txt
+  0%|          | 0/5 [00:00<?, ?it/s] 20%|██        | 1/5 [00:00<00:01,  3.60it/s] 40%|████      | 2/5 [00:00<00:00,  3.60it/s] 60%|██████    | 3/5 [00:00<00:00,  3.59it/s] 80%|████████  | 4/5 [00:01<00:00,  3.49it/s]100%|██████████| 5/5 [00:01<00:00,  3.53it/s]100%|██████████| 5/5 [00:01<00:00,  3.54it/s]
+Processing /home/e12229987/Linguistic-Steganalysis-with-LLMs/data/adg/stego.txt...
+  Truncated to first 5 lines for /home/e12229987/Linguistic-Steganalysis-with-LLMs/data/adg/stego.txt
+  0%|          | 0/5 [00:00<?, ?it/s] 20%|██        | 1/5 [00:00<00:01,  3.36it/s] 40%|████      | 2/5 [00:00<00:00,  3.69it/s] 60%|██████    | 3/5 [00:00<00:00,  3.65it/s] 80%|████████  | 4/5 [00:01<00:00,  3.63it/s]100%|██████████| 5/5 [00:01<00:00,  3.60it/s]100%|██████████| 5/5 [00:01<00:00,  3.60it/s]
+Processing /home/e12229987/Linguistic-Steganalysis-with-LLMs/data/hc5/cover.txt...
+  Truncated to first 5 lines for /home/e12229987/Linguistic-Steganalysis-with-LLMs/data/hc5/cover.txt
+  0%|          | 0/5 [00:00<?, ?it/s] 20%|██        | 1/5 [00:00<00:01,  3.61it/s] 40%|████      | 2/5 [00:00<00:00,  3.60it/s] 60%|██████    | 3/5 [00:00<00:00,  3.60it/s] 80%|████████  | 4/5 [00:01<00:00,  3.50it/s]100%|██████████| 5/5 [00:01<00:00,  3.54it/s]100%|██████████| 5/5 [00:01<00:00,  3.55it/s]
+Processing /home/e12229987/Linguistic-Steganalysis-with-LLMs/data/hc5/stego.txt...
+  Truncated to first 5 lines for /home/e12229987/Linguistic-Steganalysis-with-LLMs/data/hc5/stego.txt
+  0%|          | 0/5 [00:00<?, ?it/s] 20%|██        | 1/5 [00:00<00:01,  3.36it/s] 40%|████      | 2/5 [00:00<00:00,  3.47it/s] 60%|██████    | 3/5 [00:00<00:00,  3.53it/s] 80%|████████  | 4/5 [00:01<00:00,  3.47it/s]100%|██████████| 5/5 [00:01<00:00,  3.13it/s]100%|██████████| 5/5 [00:01<00:00,  3.27it/s]
+Run finished. Summary: {'ac': '2 files', 'adg': '2 files', 'hc5': '2 files'}
+Finished.

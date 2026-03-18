@@ -1,0 +1,6 @@
+Running on: a-a100-q-6
+Starting script -test.py
+Unknown option: -e
+usage: python3 [option] ... [-c cmd | -m mod | file | -] [arg] ...
+Try `python -h' for more information.
+Finished.

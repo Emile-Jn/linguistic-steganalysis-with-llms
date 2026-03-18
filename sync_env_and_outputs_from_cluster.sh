@@ -11,6 +11,8 @@ REMOTE_DIR="Linguistic-Steganalysis-with-LLMs"
 rsync -avP -e ssh \
   --include='outputs' \
   --include='outputs/**' \
+  --include='slurm_output' \
+  --include='slurm_output/**' \
   --include='pyproject.toml' \
   --include='uv.lock' \
   --exclude='*' \
