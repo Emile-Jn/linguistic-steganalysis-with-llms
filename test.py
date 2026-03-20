@@ -22,8 +22,8 @@ from utils import get_device, get_root_dir
 
 from pathlib import Path
 
-# Prefer 32 for A100 throughput
-BATCH_SIZE = 32
+# Use a smaller batch to reduce GPU memory spikes during generation.
+BATCH_SIZE = 8
 
 
 def read_txt_lines(path: str):
@@ -303,7 +303,9 @@ def process_dataset_dir(
     *,
     nmax: Optional[int],
     chunk_size: int,
+    file_name: Optional[str],
     cover_only: bool,
+    stego_only: bool,
     print_tokens: bool,
     dry_run: bool,
     on_chunk_done,
@@ -316,7 +318,9 @@ def process_dataset_dir(
         model, tokenizer, device: loaded model components (may be None in dry-run mode).
         nmax: maximum number of input lines per file; None means no limit.
         chunk_size: lines per inference batch.
+        file_name: if set, only process the exact file with this name in each dataset folder.
         cover_only: if True, only process a file named exactly 'cover.txt'.
+        stego_only: if True, only process .txt files whose names start with 'stego'.
         print_tokens: if True, write a parallel .tokens.jsonl for each output file.
         dry_run: if True, produce fake outputs without calling the model.
         on_chunk_done: callback(lines_in_chunk: int) forwarded to _process_txt_file.
@@ -327,9 +331,14 @@ def process_dataset_dir(
     out_dataset_dir = out_root / dataset_dir.name
     out_dataset_dir.mkdir(parents=True, exist_ok=True)
 
-    if cover_only:
+    if file_name:
+        candidate = dataset_dir / file_name
+        txt_files = [candidate] if candidate.exists() else []
+    elif cover_only:
         candidate = dataset_dir / 'cover.txt'
         txt_files = [candidate] if candidate.exists() else []
+    elif stego_only:
+        txt_files = sorted(dataset_dir.glob("stego*.txt"))
     else:
         txt_files = sorted(dataset_dir.glob("*.txt"))
 
@@ -363,7 +372,9 @@ def run_all_tests(nmax: Optional[int] = None, print_tokens: bool = False, use_lo
         dry_run: skip model loading; produce fake outputs (useful for testing I/O logic).
         cli_args: parsed CLI arguments dict, embedded in the manifest for reproducibility.
     """
+    file_name = cli_args.get('file_name') if isinstance(cli_args, dict) else None
     cover_only = bool(cli_args.get('cover_only')) if isinstance(cli_args, dict) else False
+    stego_only = bool(cli_args.get('stego_only')) if isinstance(cli_args, dict) else False
     chunk_size = int(manifest_threshold) if manifest_threshold and manifest_threshold > 0 else 1000
 
     data_root, outputs_root = _resolve_paths(cli_args)
@@ -396,7 +407,8 @@ def run_all_tests(nmax: Optional[int] = None, print_tokens: bool = False, use_lo
 
     common_kwargs = dict(
         model=model, tokenizer=tokenizer, device=device,
-        nmax=nmax, chunk_size=chunk_size, cover_only=cover_only,
+        nmax=nmax, chunk_size=chunk_size, file_name=file_name,
+        cover_only=cover_only, stego_only=stego_only,
         print_tokens=print_tokens, dry_run=dry_run, on_chunk_done=on_chunk_done,
     )
 
@@ -404,7 +416,9 @@ def run_all_tests(nmax: Optional[int] = None, print_tokens: bool = False, use_lo
     dirs_to_process = [data_root] + sorted([d for d in data_root.iterdir() if d.is_dir()])
     for dataset_dir in dirs_to_process:
         has_txt = (
-            (dataset_dir / 'cover.txt').exists() if cover_only
+            (dataset_dir / file_name).exists() if file_name
+            else (dataset_dir / 'cover.txt').exists() if cover_only
+            else any(dataset_dir.glob("stego*.txt")) if stego_only
             else any(dataset_dir.glob("*.txt"))
         )
         if has_txt:
@@ -418,6 +432,8 @@ def run_all_tests(nmax: Optional[int] = None, print_tokens: bool = False, use_lo
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run steganographic detection tests over text datasets")
     parser.add_argument("-nmax", type=int, default=None, help="maximum number of lines to read from each .txt file (default: all lines)")
+    parser.add_argument("-file-name", "--file-name", dest="file_name", type=str, default=None,
+                        help="only run inference on the exact file name given within each dataset folder")
     # If set, write a .tokens.jsonl file next to each generated .txt with token id arrays per line
     parser.add_argument("--print-tokens", action="store_true", dest="print_tokens",
                         help="write per-output token id JSONL files next to the .txt outputs")
@@ -432,9 +448,14 @@ if __name__ == "__main__":
     # If set, only process files named 'cover.txt' in each dataset folder
     parser.add_argument("--cover-only", dest="cover_only", action="store_true", default=False,
                         help="only run inference on files named 'cover.txt' (default: process all .txt files)")
+    # If set, only process .txt files whose names start with 'stego' in each dataset folder
+    parser.add_argument("--stego-only", dest="stego_only", action="store_true", default=False,
+                        help="only run inference on .txt files whose names start with 'stego' (default: process all .txt files)")
     # Optional: override the data path (relative to project root) instead of using default data/baseline
     parser.add_argument("--data-path", dest="data_path", type=str, default=None,
                         help="path (relative to the data dir in the project root) to the data directory to process (overrides default 'data/baseline')")
     args = parser.parse_args()
+    if args.file_name and (args.cover_only or args.stego_only):
+        parser.error("--file-name cannot be combined with --cover-only or --stego-only")
     # Pass all parsed CLI argument values into the run manifest for reproducibility
     run_all_tests(nmax=args.nmax, print_tokens=args.print_tokens, use_lora=not args.no_lora, manifest_threshold=args.manifest_threshold, dry_run=args.dry_run, cli_args=vars(args))

@@ -6,6 +6,22 @@ It creates new files in the `predictions/` directory where each line is converte
 import argparse
 from pathlib import Path
 
+
+def _creation_or_modified_time(path: Path) -> float:
+    """Return creation time when available, otherwise last-modified time."""
+    stat = path.stat()
+    return getattr(stat, "st_birthtime", stat.st_mtime)
+
+
+def find_most_recent_run(outputs_dir: Path) -> Path | None:
+    """Find the most recently created top-level run_* directory in outputs/."""
+    run_dirs = [p for p in outputs_dir.iterdir() if p.is_dir() and p.name.startswith("run_")]
+    if not run_dirs:
+        return None
+
+    # Sort by creation/modified time first, then by name for deterministic tie-breaking.
+    return max(run_dirs, key=lambda p: (_creation_or_modified_time(p), p.name))
+
 def coerce_txt_to_bool(label: str) -> bool | None:
     """Convert label string to boolean value."""
     label = label.lower()
@@ -97,15 +113,31 @@ def main() -> None:
     parser.add_argument(
         "folder",
         type=Path,
-        help="Subfolder under outputs/ whose .txt files should be converted (e.g. run_37/ac).",
+        nargs="?",
+        help=(
+            "Optional subfolder under outputs/ whose .txt files should be converted "
+            "(e.g. run_37/ac). If omitted, uses the most recently created run_* folder "
+            "under outputs/."
+        ),
     )
     args = parser.parse_args()
 
-    # Treat CLI input as relative to outputs/.
-    requested = args.folder
-    if requested.parts and requested.parts[0] == "outputs":
-        requested = Path(*requested.parts[1:])
-    folder_path = Path("outputs") / requested
+    outputs_dir = Path("outputs")
+    if not outputs_dir.exists() or not outputs_dir.is_dir():
+        parser.error(f"outputs/ directory does not exist or is not a directory: {outputs_dir}")
+
+    # Treat CLI input as relative to outputs/ when provided.
+    if args.folder is not None:
+        requested = args.folder
+        if requested.parts and requested.parts[0] == "outputs":
+            requested = Path(*requested.parts[1:])
+        folder_path = outputs_dir / requested
+    else:
+        latest_run = find_most_recent_run(outputs_dir)
+        if latest_run is None:
+            parser.error("No run_* directories found under outputs/.")
+        folder_path = latest_run
+        print(f"No folder specified; using latest outputs run: {folder_path}")
 
     if not folder_path.exists() or not folder_path.is_dir():
         parser.error(

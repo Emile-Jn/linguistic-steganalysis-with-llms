@@ -1,0 +1,7 @@
+Running on: a-a100-q-6
+Starting script test.py
+usage: test.py [-h] [-nmax NMAX] [--print-tokens] [--no-lora]
+               [--manifest-threshold MANIFEST_THRESHOLD] [--dry-run]
+               [--cover-only] [--data-path DATA_PATH]
+test.py: error: unrecognized arguments: --stego-only
+Finished.

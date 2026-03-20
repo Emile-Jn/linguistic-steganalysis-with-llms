@@ -21,6 +21,10 @@ sbatch --partition=GPU-a100 run.sh test.py -nmax 5
 sbatch run.sh test.py --data-path qwen-stego
 # Inference on gen cover inspired by stanford IMDB dataset:
 sbatch run.sh test.py --data-path qwen3_stanford_imdb
+# Inference on stego dataset obtained from fine-tuned qwen3:
+sbatch --partition=GPU-a100 run.sh test.py --data-path qwen3_stanford_imdb --stego-only
+# Inference on stego dataset with FMS obtained from fine-tuned qwen3:
+sbatch --partition=GPU-a100 run.sh test.py --data-path qwen3_stanford_imdb --file-name brute_force_dataset_20260319_220731.txt
 
 # Evaluation:
 python3 -m analysis.evaluation run_38
