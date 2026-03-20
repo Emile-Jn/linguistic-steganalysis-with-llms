@@ -1,0 +1,21 @@
+{
+  "run_dir": "/home/e12229987/Linguistic-Steganalysis-with-LLMs/outputs/run_41",
+  "timestamp": "2026-03-20T00:57:04Z",
+  "summary": {
+    "qwen3_stanford_imdb": "1 files"
+  },
+  "total_lines_processed": 100,
+  "total_inference_time_seconds": 18.333,
+  "total_time_seconds": 18.333,
+  "cli_args": {
+    "nmax": null,
+    "file_name": "brute_force_dataset_20260319_220731.txt",
+    "print_tokens": false,
+    "no_lora": false,
+    "manifest_threshold": 1000,
+    "dry_run": false,
+    "cover_only": false,
+    "stego_only": false,
+    "data_path": "qwen3_stanford_imdb"
+  }
+}
